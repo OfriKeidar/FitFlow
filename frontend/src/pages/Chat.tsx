@@ -4,6 +4,7 @@ import type { PendingAction } from '../api/types'
 import { ActionCard } from '../components/ActionCard'
 import { Icon } from '../components/Icon'
 import { Logo } from '../components/Logo'
+import { useUser } from '../user'
 
 // A message in the chat, optionally with the proposals the coach made in that reply.
 interface Message {
@@ -15,6 +16,7 @@ interface Message {
 const EXAMPLES = ['אכלתי 2 ביצים, פרוסת לחם וקוטג\'', 'רצתי חצי שעה', 'מה לאכול לארוחת ערב?', 'איך אני מתקדם השבוע?']
 
 export function Chat() {
+  const user = useUser()
   const [messages, setMessages] = useState<Message[]>([])
   const [pending, setPending] = useState<PendingAction[]>([]) // unresolved proposals from earlier
   const [loaded, setLoaded] = useState(false)
@@ -64,7 +66,10 @@ export function Chat() {
 
       {loaded && messages.length === 0 && (
         <div className="card stack fade-in">
-          <p>היי! ספר לי מה אכלת או איך התאמנת, ואני ארשום ואחשב בשבילך.</p>
+          <div className="row" style={{ justifyContent: 'flex-start' }}>
+            <Logo size={36} />
+            <p>היי {user.name}! ספר לי מה אכלת או איך התאמנת, ואני ארשום ואחשב בשבילך.</p>
+          </div>
           <p className="muted">כל רישום מחכה לאישור שלך לפני שהוא נשמר.</p>
           <div className="chips">
             {EXAMPLES.map((ex) => (

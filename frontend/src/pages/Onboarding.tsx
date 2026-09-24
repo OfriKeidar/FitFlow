@@ -1,38 +1,23 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, errorMessage } from '../api/client'
-import type { ActivityLevel, Frequency, Goal, User, UserCreate } from '../api/types'
+import type { ActivityLevel, Frequency, Goal, Pace, Plan, User, UserCreate } from '../api/types'
 import { Icon, type IconName } from '../components/Icon'
 import { Loader, Logo } from '../components/Logo'
-import { ACTIVITY_LEVEL_LABELS, FREQUENCY_LABELS } from '../labels'
+import { ACTIVITY_LEVELS, FREQUENCY_LABELS, PACE_LABELS, formatDate } from '../labels'
 
 const GOALS: { id: Goal; title: string; sub: string; icon: IconName; color: string }[] = [
-  { id: 'cut', title: 'חיטוב', sub: 'ירידה בשומן תוך שמירה על שריר', icon: 'trendDown', color: '#D85A30' },
-  { id: 'bulk', title: 'מסה', sub: 'עלייה במסת שריר בעודף מבוקר', icon: 'trendUp', color: '#1D9E75' },
-  { id: 'recomp', title: 'ריקומפוזיציה', sub: 'להוריד שומן ולבנות שריר במקביל', icon: 'arrows', color: '#7F77DD' },
+  { id: 'cut', title: 'חיטוב', sub: 'לרדת בשומן ולשמור על השריר', icon: 'trendDown', color: '#D85A30' },
+  { id: 'bulk', title: 'מסה', sub: 'לעלות במסת שריר בעודף מבוקר', icon: 'trendUp', color: '#1D9E75' },
   { id: 'maintain', title: 'שמירה', sub: 'לשמור על המשקל הנוכחי', icon: 'equal', color: '#888780' },
 ]
-
-// Weekly rate choices per goal (kg/week). Recomp and maintain have no rate.
-const RATES: Partial<Record<Goal, { value: number; label: string }[]>> = {
-  cut: [
-    { value: 0.25, label: 'שמרני · 0.25' },
-    { value: 0.5, label: 'מומלץ · 0.5' },
-    { value: 0.75, label: 'מהיר · 0.75' },
-  ],
-  bulk: [
-    { value: 0.1, label: 'איטי · 0.1' },
-    { value: 0.25, label: 'מומלץ · 0.25' },
-    { value: 0.4, label: 'מהיר · 0.4' },
-  ],
-}
-
+const ACTIVITY_ICONS: Record<ActivityLevel, IconName> = { sedentary: 'user', light: 'run', active: 'barbell' }
 const STEPS = 4
 
 export function Onboarding({ onDone }: { onDone: (user: User) => void }) {
   const [step, setStep] = useState(1)
   const [form, setForm] = useState<UserCreate>({
-    sex: 'male', age: 25, height_cm: 175, weight_kg: 75,
-    activity: 'sedentary', goal: 'cut', weekly_rate_kg: 0.5,
+    name: '', sex: 'male', age: 25, height_cm: 175, weight_kg: 75,
+    activity: 'sedentary', goal: 'cut', target_weight_kg: 70, pace: 'recommended',
     weigh_in_frequency: 'weekly', weekly_workout_goal: 3,
   })
   const [error, setError] = useState<string | null>(null)
@@ -44,29 +29,32 @@ export function Onboarding({ onDone }: { onDone: (user: User) => void }) {
   }
 
   function chooseGoal(goal: Goal) {
-    const rates = RATES[goal]
-    update({ goal, weekly_rate_kg: rates ? rates[1].value : 0 })
+    // Suggest a sensible starting target: 5 kg down for a cut, 3 kg up for a bulk.
+    const suggested = { cut: form.weight_kg - 5, bulk: form.weight_kg + 3, maintain: null }[goal]
+    update({ goal, target_weight_kg: suggested })
   }
 
-  function validateBasics(): string | null {
-    // Written as "not inside the range" so an empty field (NaN) fails too.
-    const inRange = (v: number, min: number, max: number) => v >= min && v <= max
-    if (!inRange(form.age, 14, 100)) return 'גיל צריך להיות בין 14 ל-100'
-    if (!inRange(form.height_cm, 120, 230)) return 'גובה צריך להיות בין 120 ל-230 ס"מ'
-    if (!inRange(form.weight_kg, 35, 300)) return 'משקל צריך להיות בין 35 ל-300 ק"ג'
+  // Each step checks its own fields before moving on. Returns an error message, or null if OK.
+  function validate(): string | null {
+    const inRange = (v: number, min: number, max: number) => v >= min && v <= max // NaN fails too
+    if (step === 1) {
+      if (!form.name.trim()) return 'איך קוראים לך?'
+      if (!inRange(form.age, 14, 100)) return 'גיל צריך להיות בין 14 ל־100'
+      if (!inRange(form.height_cm, 120, 230)) return 'גובה צריך להיות בין 120 ל־230 ס"מ'
+      if (!inRange(form.weight_kg, 35, 300)) return 'משקל צריך להיות בין 35 ל־300 ק"ג'
+    }
+    if (step === 2) return targetProblem(form)
     return null
   }
 
   async function next() {
-    if (step === 1) {
-      const problem = validateBasics()
-      if (problem) return setError(problem)
-    }
+    const problem = validate()
+    if (problem) return setError(problem)
     if (step < STEPS) return setStep(step + 1)
 
     setSaving(true)
     try {
-      const user = await api.createUser(form)
+      const user = await api.createUser({ ...form, name: form.name.trim() })
       // Keep the loader up for a moment - the transition feels calmer than an instant jump.
       setTimeout(() => onDone(user), 900)
     } catch (e) {
@@ -75,7 +63,7 @@ export function Onboarding({ onDone }: { onDone: (user: User) => void }) {
     }
   }
 
-  if (saving) return <Loader message="מחשב את היעדים שלך…" />
+  if (saving) return <Loader message={`מחשב את היעדים שלך, ${form.name.trim()}…`} />
 
   return (
     <div className="stack fade-in" key={step} style={{ gap: 16 }}>
@@ -92,7 +80,12 @@ export function Onboarding({ onDone }: { onDone: (user: User) => void }) {
 
       {step === 1 && (
         <>
-          <h1>נתחיל בהיכרות</h1>
+          <h1>נעים להכיר!</h1>
+          <label className="field">
+            איך קוראים לך?
+            <input className="input" value={form.name} maxLength={40} autoFocus
+                   onChange={(e) => update({ name: e.target.value })} placeholder="השם שלך" />
+          </label>
           <div className="chips">
             {(['male', 'female'] as const).map((sex) => (
               <button key={sex} className={`chip ${form.sex === sex ? 'selected' : ''}`} onClick={() => update({ sex })}>
@@ -102,13 +95,13 @@ export function Onboarding({ onDone }: { onDone: (user: User) => void }) {
           </div>
           <NumberField label="גיל" value={form.age} onChange={(age) => update({ age })} />
           <NumberField label='גובה (ס"מ)' value={form.height_cm} onChange={(height_cm) => update({ height_cm })} />
-          <NumberField label='משקל (ק"ג)' value={form.weight_kg} step={0.1} onChange={(weight_kg) => update({ weight_kg })} />
+          <NumberField label='משקל נוכחי (ק"ג)' value={form.weight_kg} step={0.1} onChange={(weight_kg) => update({ weight_kg })} />
         </>
       )}
 
       {step === 2 && (
         <>
-          <h1>מה המטרה שלך?</h1>
+          <h1>מה המטרה שלך, {form.name.trim()}?</h1>
           {GOALS.map((g) => (
             <button key={g.id} className={`option ${form.goal === g.id ? 'selected' : ''}`} onClick={() => chooseGoal(g.id)}>
               <span style={{ color: g.color }}><Icon name={g.icon} size={24} /></span>
@@ -118,36 +111,23 @@ export function Onboarding({ onDone }: { onDone: (user: User) => void }) {
               </span>
             </button>
           ))}
-          {RATES[form.goal] && (
-            <div className="card">
-              <p style={{ marginBottom: 8 }}>קצב {form.goal === 'cut' ? 'ירידה' : 'עלייה'} (ק"ג בשבוע)</p>
-              <div className="chips">
-                {RATES[form.goal]!.map((r) => (
-                  <button
-                    key={r.value}
-                    className={`chip ${form.weekly_rate_kg === r.value ? 'selected' : ''}`}
-                    onClick={() => update({ weekly_rate_kg: r.value })}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {form.goal !== 'maintain' && <TargetPicker form={form} update={update} />}
         </>
       )}
 
       {step === 3 && (
         <>
           <h1>קצת על השגרה שלך</h1>
-          <p className="muted">רמת פעילות ביום-יום, בלי האימונים (אותם נרשום בנפרד)</p>
-          <div className="chips">
-            {(Object.keys(ACTIVITY_LEVEL_LABELS) as ActivityLevel[]).map((a) => (
-              <button key={a} className={`chip ${form.activity === a ? 'selected' : ''}`} onClick={() => update({ activity: a })}>
-                {ACTIVITY_LEVEL_LABELS[a]}
-              </button>
-            ))}
-          </div>
+          <p className="muted">כמה אתה זז ביום־יום, בלי האימונים (אותם נרשום בנפרד)</p>
+          {(Object.keys(ACTIVITY_LEVELS) as ActivityLevel[]).map((a) => (
+            <button key={a} className={`option ${form.activity === a ? 'selected' : ''}`} onClick={() => update({ activity: a })}>
+              <span style={{ color: 'var(--accent)' }}><Icon name={ACTIVITY_ICONS[a]} size={22} /></span>
+              <span>
+                <div style={{ fontWeight: 500 }}>{ACTIVITY_LEVELS[a].title}</div>
+                <div className="option-sub">{ACTIVITY_LEVELS[a].sub}</div>
+              </span>
+            </button>
+          ))}
           <p className="muted">כל כמה זמן תישקל?</p>
           <div className="chips">
             {(Object.keys(FREQUENCY_LABELS) as Frequency[]).map((f) => (
@@ -156,7 +136,7 @@ export function Onboarding({ onDone }: { onDone: (user: User) => void }) {
               </button>
             ))}
           </div>
-          <p className="muted">יעד אימונים בשבוע</p>
+          <p className="muted">כמה אימונים בשבוע תרצה לעשות?</p>
           <div className="chips">
             {[2, 3, 4, 5, 6].map((n) => (
               <button key={n} className={`chip ${form.weekly_workout_goal === n ? 'selected' : ''}`} onClick={() => update({ weekly_workout_goal: n })}>
@@ -169,9 +149,9 @@ export function Onboarding({ onDone }: { onDone: (user: User) => void }) {
 
       {step === 4 && (
         <>
-          <h1>הכל מוכן</h1>
+          <h1>הכל מוכן, {form.name.trim()}!</h1>
           <div className="card stack">
-            <p>המערכת תחשב לך יעד קלורי ומאקרו התחלתי, ותלמד מהנתונים שלך מה חילוף החומרים האמיתי שלך.</p>
+            <p>אחשב לך יעד קלורי ומאקרו התחלתי, ואלמד מהנתונים שלך מה חילוף החומרים האמיתי שלך.</p>
             <p className="muted">
               אחרי שבועיים של רישום ושקילות, היעדים יתעדכנו אוטומטית לפי ההתקדמות בפועל.
             </p>
@@ -181,9 +161,62 @@ export function Onboarding({ onDone }: { onDone: (user: User) => void }) {
 
       {error && <p className="error-text">{error}</p>}
       <div className="row">
-        {step > 1 ? <button className="btn" onClick={() => setStep(step - 1)}>חזרה</button> : <span />}
+        {step > 1 ? <button className="btn" onClick={() => { setStep(step - 1); setError(null) }}>חזרה</button> : <span />}
         <button className="btn primary" onClick={next}>{step < STEPS ? 'המשך' : 'יאללה, מתחילים'}</button>
       </div>
+    </div>
+  )
+}
+
+/** Why the target weight doesn't fit the goal, or null if it's fine. */
+function targetProblem(form: UserCreate): string | null {
+  if (form.goal === 'maintain') return null
+  const target = form.target_weight_kg ?? NaN
+  if (!(target >= 35 && target <= 300)) return 'מה משקל היעד שלך?'
+  if (form.goal === 'cut' && target >= form.weight_kg) return 'בחיטוב, משקל היעד צריך להיות נמוך מהמשקל הנוכחי'
+  if (form.goal === 'bulk' && target <= form.weight_kg) return 'במסה, משקל היעד צריך להיות גבוה מהמשקל הנוכחי'
+  return null
+}
+
+/** Target weight + pace, with a live "you'll get there around <date>" preview from the server. */
+function TargetPicker({ form, update }: { form: UserCreate; update: (p: Partial<UserCreate>) => void }) {
+  const [plan, setPlan] = useState<Plan | null>(null)
+  const valid = targetProblem(form) === null
+
+  useEffect(() => {
+    if (!valid) return setPlan(null)
+    // Debounce: wait until the user stops typing before asking the server.
+    const timer = setTimeout(() => {
+      api.planPreview(form.goal, form.weight_kg, form.target_weight_kg!, form.pace).then(setPlan).catch(() => setPlan(null))
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [valid, form.goal, form.weight_kg, form.target_weight_kg, form.pace])
+
+  return (
+    <div className="card stack">
+      <NumberField
+        label='משקל יעד (ק"ג)' value={form.target_weight_kg ?? NaN} step={0.5}
+        onChange={(target_weight_kg) => update({ target_weight_kg })}
+      />
+      <p className="muted">באיזה קצב?</p>
+      <div className="chips">
+        {(Object.keys(PACE_LABELS) as Pace[]).map((pace) => (
+          <button key={pace} className={`chip ${form.pace === pace ? 'selected' : ''}`} onClick={() => update({ pace })}>
+            {PACE_LABELS[pace]}
+          </button>
+        ))}
+      </div>
+      {plan?.target_date && (
+        <div className="banner accent pop" key={plan.target_date}>
+          <Icon name="flag" />
+          <span>
+            תגיע ל־{form.target_weight_kg} ק"ג בערך ב־<strong style={{ fontWeight: 500 }}>{formatDate(plan.target_date)}</strong>
+            <span className="muted" style={{ display: 'block', color: 'inherit' }}>
+              {plan.weeks_to_target} שבועות · כ־{plan.weekly_rate_kg} ק"ג בשבוע
+            </span>
+          </span>
+        </div>
+      )}
     </div>
   )
 }

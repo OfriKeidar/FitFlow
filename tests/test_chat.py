@@ -211,5 +211,6 @@ def test_request_uses_expected_model_settings(client, user, llm):
     chat(client, user, "hi")
     request = llm.requests[0]
     assert request["model"] == "claude-opus-5"
+    assert request["system"][1]["text"] == "The user's name is Dana."
     assert request["fallbacks"] == "default"
     assert {t["name"] for t in request["tools"]} >= {"search_foods", "propose_food_log", "propose_workout"}

@@ -32,8 +32,8 @@ def main() -> None:
         start = today - timedelta(days=DAYS)
 
         user = tracking.create_user(
-            db, start, sex="male", age=27, height_cm=178, start_weight_kg=84.0,
-            activity="sedentary", goal="cut", weekly_rate_kg=0.5,
+            db, start, name="דנה", sex="male", age=27, height_cm=178, start_weight_kg=84.0,
+            activity="sedentary", goal="cut", target_weight_kg=76.0, pace="recommended",
             weigh_in_frequency="daily", weekly_workout_goal=4,
         )
 

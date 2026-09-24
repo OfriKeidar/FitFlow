@@ -2,8 +2,8 @@
 // Components never build URLs or headers themselves; they call these functions.
 
 import type {
-  ChatHistoryItem, ChatReply, DailyStatus, Food, Insight, MealSuggestion, PantryItem,
-  PendingAction, Progress, User, UserCreate, Week, Workout,
+  ChatHistoryItem, ChatReply, DailyStatus, Food, Goal, Insight, MealSuggestion, PantryItem, Pace,
+  PendingAction, Plan, Progress, User, UserCreate, Week, Workout, WorkoutStats,
 } from './types'
 
 const BASE = '/api' // proxied to FastAPI by Vite (see vite.config.ts)
@@ -90,6 +90,8 @@ const del = (path: string) => request<void>('DELETE', path)
 export const api = {
   createUser: (data: UserCreate) => post<User>('/users', data),
   me: () => get<User>('/me'),
+  planPreview: (goal: Goal, weightKg: number, targetKg: number, pace: Pace) =>
+    get<Plan>(`/plan-preview?goal=${goal}&weight_kg=${weightKg}&target_weight_kg=${targetKg}&pace=${pace}`),
 
   today: () => get<DailyStatus>('/today'),
   deleteFood: (id: number) => del(`/log/food/${id}`),
@@ -107,6 +109,7 @@ export const api = {
   mealSuggestion: () => get<MealSuggestion>(`/coach/meal-suggestion?hour=${new Date().getHours()}`),
   insights: () => get<Insight[]>('/coach/insights'),
   week: () => get<Week>('/workouts/week'),
+  workoutStats: () => get<WorkoutStats>('/workouts/stats'),
   progress: () => get<Progress>('/progress'),
 
   chat: (message: string) => post<ChatReply>('/chat', { message, hour: new Date().getHours() }),

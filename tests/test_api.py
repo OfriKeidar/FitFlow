@@ -11,8 +11,8 @@ def test_create_user_computes_initial_tdee(client, user):
 
 
 def test_invalid_profile_is_rejected(client):
-    r = client.post("/users", json={"sex": "male", "age": 5, "height_cm": 180, "weight_kg": 80,
-                                    "activity": "sedentary", "goal": "cut"})
+    r = client.post("/users", json={"name": "A", "sex": "male", "age": 5, "height_cm": 180, "weight_kg": 80,
+                                    "activity": "sedentary", "goal": "maintain"})
     assert r.status_code == 422
 
 
@@ -49,7 +49,7 @@ def test_unknown_workout_is_rejected(client, user):
 
 def test_cannot_delete_someone_elses_entry(client, user):
     entry = client.post("/log/custom-food", headers=user, json={"description": "פיצה", "kcal": 300}).json()
-    other = client.post("/users", json={"sex": "female", "age": 30, "height_cm": 165, "weight_kg": 60,
+    other = client.post("/users", json={"name": "B", "sex": "female", "age": 30, "height_cm": 165, "weight_kg": 60,
                                         "activity": "light", "goal": "maintain"}).json()
     r = client.delete(f"/log/food/{entry['id']}", headers={"X-User-Id": str(other["id"])})
     assert r.status_code == 404
@@ -107,3 +107,35 @@ def test_tdee_adapts_after_weeks_of_data(client, user, clock):
 def test_no_banner_when_update_had_too_little_data(client, user, clock):
     clock.today += timedelta(days=7)  # an update is due, but nothing was logged
     assert client.get("/today", headers=user).json()["target_update"] is None
+
+
+def test_target_must_match_goal(client):
+    body = {"name": "A", "sex": "male", "age": 30, "height_cm": 180, "weight_kg": 80, "activity": "light"}
+    assert client.post("/users", json=body | {"goal": "cut", "target_weight_kg": 85}).status_code == 422
+    assert client.post("/users", json=body | {"goal": "bulk", "target_weight_kg": 75}).status_code == 422
+    assert client.post("/users", json=body | {"goal": "cut"}).status_code == 422  # target required
+    assert client.post("/users", json=body | {"goal": "maintain"}).status_code == 201
+
+
+def test_plan_preview_estimates_the_target_date(client, clock):
+    plan = client.get("/plan-preview", params={"goal": "cut", "weight_kg": 80, "target_weight_kg": 72}).json()
+    assert plan["weekly_rate_kg"] == 0.6 and plan["weeks_to_target"] == 14
+    assert plan["target_date"] == (clock.today + timedelta(weeks=14)).isoformat()
+
+
+def test_switching_to_maintain_clears_the_target(client, user):
+    me = client.patch("/me", headers=user, json={"goal": "maintain"}).json()
+    assert me["goal"] == "maintain" and me["target_weight_kg"] is None
+
+
+def test_progress_includes_plan(client, user):
+    p = client.get("/progress", headers=user).json()
+    assert p["start_weight_kg"] == 80 and p["target_weight_kg"] == 72
+    assert p["plan"]["weeks_to_target"] == 14
+
+
+def test_workout_stats(client, user):
+    client.post("/log/workout", headers=user, json={"activity": "running", "minutes": 30})
+    stats = client.get("/workouts/stats", headers=user).json()
+    assert stats["total_workouts"] == 1 and stats["days_since_last"] == 0
+    assert stats["favorite_activity"] == "running"

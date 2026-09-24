@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom'
 import { api, errorMessage } from '../api/client'
 import type { ChatReply, DailyStatus } from '../api/types'
 import { ActionCard } from '../components/ActionCard'
-import { Icon } from '../components/Icon'
-import { MacroBar } from '../components/MacroBar'
+import { Icon, type IconName } from '../components/Icon'
+import { Ring } from '../components/Ring'
 import { useApi } from '../hooks/useApi'
-import { activityName, weekdayName } from '../labels'
+import { useCountUp } from '../hooks/useCountUp'
+import { activityName, greeting, weekdayName } from '../labels'
+import { useUser } from '../user'
 
 export function Today() {
   const { data, error, reload } = useApi(api.today)
@@ -17,19 +19,10 @@ export function Today() {
   const proteinLeft = Math.round(data.remaining.protein_g)
   return (
     <>
-      <div className="page-header">
-        <h1>היום</h1>
-        <span className="muted">{weekdayName(data.day)}</span>
-      </div>
-
+      <Greeting day={data.day} />
       {data.target_update && <TargetUpdateBanner status={data} />}
       <CalorieCard status={data} />
-
-      <div className="card stack">
-        <MacroBar label="חלבון" eaten={data.eaten.protein_g} target={data.target.protein_g} color="var(--accent)" />
-        <MacroBar label="פחמימות" eaten={data.eaten.carbs_g} target={data.target.carbs_g} color="var(--carbs)" />
-        <MacroBar label="שומן" eaten={data.eaten.fat_g} target={data.target.fat_g} color="var(--fat)" />
-      </div>
+      <MacroRings status={data} />
 
       {data.eaten.kcal > 0 && proteinLeft > 15 && data.remaining.kcal > 150 && (
         <Link to="/meal" className="banner warning" style={{ textDecoration: 'none' }}>
@@ -44,46 +37,78 @@ export function Today() {
   )
 }
 
+function Greeting({ day }: { day: string }) {
+  const user = useUser()
+  const hello = greeting()
+  return (
+    <div className="page-header fade-in">
+      <div className="row" style={{ gap: 8 }}>
+        <span className="greeting-icon"><Icon name={hello.icon} size={26} /></span>
+        <h1>{hello.text}, {user.name}</h1>
+      </div>
+      <span className="muted">{weekdayName(day)}</span>
+    </div>
+  )
+}
+
 function CalorieCard({ status }: { status: DailyStatus }) {
-  const { target, eaten, remaining, workout_kcal } = status
-  const fraction = target.kcal > 0 ? Math.min(1, eaten.kcal / target.kcal) : 0
+  const { target, eaten, remaining, workout_kcal, energy_balance } = status
+  const shown = useCountUp(Math.abs(remaining.kcal))
   const over = remaining.kcal < 0
-  const circumference = 2 * Math.PI * 52
 
   return (
-    <div className="card row" style={{ gap: 16 }}>
-      {/* Calorie ring: fills as you eat, turns red if you go over */}
-      <svg width="128" height="128" viewBox="0 0 128 128" role="img" aria-label={`נאכלו ${Math.round(eaten.kcal)} מתוך ${Math.round(target.kcal)} קלוריות`}>
-        <circle cx="64" cy="64" r="52" fill="none" stroke="var(--surface-2)" strokeWidth="11" />
-        <circle
-          cx="64" cy="64" r="52" fill="none" strokeWidth="11" strokeLinecap="round"
-          stroke={over ? 'var(--danger)' : 'var(--accent)'}
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - fraction)}
-          transform="rotate(-90 64 64)"
-          style={{ transition: 'stroke-dashoffset 0.8s ease-out' }}
-        />
-        <text x="64" y="62" textAnchor="middle" fontSize="26" fontWeight="500" fill="var(--text)">
-          {Math.abs(Math.round(remaining.kcal))}
-        </text>
-        <text x="64" y="82" textAnchor="middle" fontSize="12" fill="var(--text-2)">
-          {over ? 'קק"ל מעל היעד' : 'קק"ל נשארו'}
-        </text>
-      </svg>
-      <div className="stack" style={{ flex: 1, gap: 6, fontSize: 14 }}>
-        <div className="row"><span className="muted">יעד</span><span>{Math.round(target.kcal)}</span></div>
-        <div className="row"><span className="muted">נאכלו</span><span>{Math.round(eaten.kcal)}</span></div>
-        {workout_kcal > 0 && (
-          <div className="row"><span className="muted">אימון</span><span style={{ color: 'var(--accent)' }}>+{Math.round(workout_kcal)}</span></div>
-        )}
-        {/* The energy balance only means something once the user has logged food today. */}
-        {eaten.kcal > 0 && (
-          <div className="row">
-            <span className="muted">{status.energy_balance < 0 ? 'גרעון' : 'עודף'}</span>
-            <span>{Math.abs(Math.round(status.energy_balance))}</span>
-          </div>
-        )}
+    <div className="card stack fade-in" style={{ alignItems: 'center', gap: 14 }}>
+      <Ring
+        value={eaten.kcal} max={target.kcal} size={150} stroke={12} color="var(--accent)"
+        label={`נאכלו ${Math.round(eaten.kcal)} מתוך ${Math.round(target.kcal)} קלוריות`}
+      >
+        <div>
+          <div style={{ fontSize: 30, fontWeight: 500, lineHeight: 1.1 }}>{Math.round(shown)}</div>
+          <div className="muted">{over ? 'קק"ל מעל היעד' : 'קק"ל נשארו'}</div>
+        </div>
+      </Ring>
+      <div className="grid-3" style={{ width: '100%', textAlign: 'center' }}>
+        <Stat icon="flag" label="יעד" value={Math.round(target.kcal)} />
+        <Stat icon="kitchen" label="נאכלו" value={Math.round(eaten.kcal)} />
+        {eaten.kcal > 0
+          // The energy balance only means something once the user has logged food today.
+          ? <Stat icon="scale" label={energy_balance < 0 ? 'גרעון עד כה' : 'עודף עד כה'} value={Math.abs(Math.round(energy_balance))} />
+          : <Stat icon="flame" label="אימון" value={Math.round(workout_kcal)} />}
       </div>
+    </div>
+  )
+}
+
+function Stat({ icon, label, value }: { icon: IconName; label: string; value: number }) {
+  return (
+    <div className="tile">
+      <div className="muted row" style={{ justifyContent: 'center', gap: 4 }}><Icon name={icon} size={14} /> {label}</div>
+      <div style={{ fontSize: 17, fontWeight: 500 }}>{value}</div>
+    </div>
+  )
+}
+
+const MACROS = [
+  { key: 'protein_g', label: 'חלבון', color: 'var(--accent)' },
+  { key: 'carbs_g', label: 'פחמימות', color: 'var(--carbs)' },
+  { key: 'fat_g', label: 'שומן', color: 'var(--fat)' },
+] as const
+
+function MacroRings({ status }: { status: DailyStatus }) {
+  return (
+    <div className="card grid-3 fade-in" style={{ textAlign: 'center' }}>
+      {MACROS.map((m) => (
+        <div key={m.key} className="stack" style={{ alignItems: 'center', gap: 4 }}>
+          <Ring
+            value={status.eaten[m.key]} max={status.target[m.key]} size={76} stroke={8} color={m.color}
+            label={`${m.label}: ${Math.round(status.eaten[m.key])} מתוך ${Math.round(status.target[m.key])} גרם`}
+          >
+            <div style={{ fontSize: 16, fontWeight: 500 }}>{Math.round(status.eaten[m.key])}</div>
+          </Ring>
+          <div style={{ fontSize: 13 }}>{m.label}</div>
+          <div className="muted" style={{ fontSize: 12 }}>מתוך {Math.round(status.target[m.key])} גר'</div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -149,6 +174,7 @@ function FoodLog({ status, onChange }: { status: DailyStatus; onChange: () => vo
   if (status.entries.length === 0 && status.workouts.length === 0) {
     return (
       <div className="card" style={{ textAlign: 'center' }}>
+        <div className="empty-icon"><Icon name="kitchen" size={28} /></div>
         <p>עוד לא רשמת כלום היום</p>
         <p className="muted">כתוב למעלה מה אכלת, או <Link to="/chat">דבר עם המאמן</Link></p>
       </div>

@@ -17,7 +17,13 @@ class Goal(Enum):
     CUT = "cut"
     MAINTAIN = "maintain"
     BULK = "bulk"
-    RECOMP = "recomp"  # small deficit + high protein: lose fat and build muscle together
+
+
+class Pace(Enum):
+    """How fast the user wants to reach their target weight (see energy.WEEKLY_RATE_PCT)."""
+    RELAXED = "relaxed"
+    RECOMMENDED = "recommended"
+    FAST = "fast"
 
 
 class ActivityLevel(Enum):
@@ -63,7 +69,8 @@ class Profile:
     weight_kg: float
     activity: ActivityLevel
     goal: Goal
-    weekly_rate_kg: float = 0.0  # desired change per week, always positive (direction comes from goal)
+    target_weight_kg: float | None = None  # None for "maintain"
+    pace: Pace = Pace.RECOMMENDED
     weigh_in_frequency: WeighInFrequency = WeighInFrequency.WEEKLY
     weekly_workout_goal: int = 3
 

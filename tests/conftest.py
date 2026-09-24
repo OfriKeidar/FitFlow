@@ -38,8 +38,8 @@ def client(clock):
 def user(client):
     """Creates a user and returns request headers authenticating as them."""
     r = client.post("/users", json={
-        "sex": "male", "age": 25, "height_cm": 180, "weight_kg": 80,
-        "activity": "sedentary", "goal": "cut", "weekly_rate_kg": 0.5,
+        "name": "Dana", "sex": "male", "age": 25, "height_cm": 180, "weight_kg": 80,
+        "activity": "sedentary", "goal": "cut", "target_weight_kg": 72,
     })
     assert r.status_code == 201, r.text
     return {"X-User-Id": str(r.json()["id"])}

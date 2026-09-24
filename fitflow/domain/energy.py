@@ -4,15 +4,20 @@ These are population formulas - a starting guess. `trend.py` later replaces the
 guess with the user's real expenditure, learned from their own data.
 """
 
-from fitflow.domain.models import KCAL_PER_KG, Goal, Macros, Profile, Sex
+import math
 
-# Safety limits
-MAX_CUT_RATE_PCT = 0.01    # lose at most 1% of body weight per week
-MAX_BULK_RATE_PCT = 0.005  # gain at most 0.5% of body weight per week
-MIN_KCAL = {Sex.MALE: 1500, Sex.FEMALE: 1200}
-RECOMP_DEFICIT_PCT = 0.05  # recomp: eat ~5% under maintenance, no weight-rate target
+from fitflow.domain.models import KCAL_PER_KG, Goal, Macros, Pace, Profile, Sex
 
-PROTEIN_G_PER_KG = {Goal.CUT: 2.2, Goal.MAINTAIN: 1.8, Goal.BULK: 1.8, Goal.RECOMP: 2.2}
+# Weekly weight change as a share of body weight. Percentages (not fixed kg) keep the pace
+# safe for every body size: 1%/week is the usual upper limit for losing fat without losing muscle,
+# and lean bulking beyond ~0.4%/week mostly adds fat.
+WEEKLY_RATE_PCT = {
+    Goal.CUT: {Pace.RELAXED: 0.005, Pace.RECOMMENDED: 0.0075, Pace.FAST: 0.01},
+    Goal.BULK: {Pace.RELAXED: 0.0015, Pace.RECOMMENDED: 0.0025, Pace.FAST: 0.004},
+}
+MIN_KCAL = {Sex.MALE: 1500, Sex.FEMALE: 1200}  # safety floor
+
+PROTEIN_G_PER_KG = {Goal.CUT: 2.2, Goal.MAINTAIN: 1.8, Goal.BULK: 1.8}
 FAT_SHARE = 0.25  # 25% of calories from fat; carbs fill the rest
 KCAL_PER_G_PROTEIN = 4
 KCAL_PER_G_CARB = 4
@@ -30,24 +35,39 @@ def initial_tdee(profile: Profile) -> float:
     return bmr(profile) * profile.activity.value
 
 
-def safe_weekly_rate(profile: Profile) -> float:
-    """The requested weekly rate, capped to a safe percentage of body weight."""
+def target_reached(profile: Profile) -> bool:
+    """Cutting and already at/below the target, or bulking and already at/above it."""
+    if profile.target_weight_kg is None:
+        return False
     if profile.goal == Goal.CUT:
-        return min(profile.weekly_rate_kg, profile.weight_kg * MAX_CUT_RATE_PCT)
+        return profile.weight_kg <= profile.target_weight_kg
     if profile.goal == Goal.BULK:
-        return min(profile.weekly_rate_kg, profile.weight_kg * MAX_BULK_RATE_PCT)
-    return 0.0
+        return profile.weight_kg >= profile.target_weight_kg
+    return False
+
+
+def weekly_rate_kg(profile: Profile) -> float:
+    """How many kg per week to lose or gain (always positive). 0 when maintaining or at target."""
+    if profile.goal == Goal.MAINTAIN or target_reached(profile):
+        return 0.0
+    return profile.weight_kg * WEEKLY_RATE_PCT[profile.goal][profile.pace]
+
+
+def weeks_to_target(profile: Profile) -> int | None:
+    """Estimated weeks until the target weight, or None if there is no target to move towards."""
+    rate = weekly_rate_kg(profile)
+    if rate == 0 or profile.target_weight_kg is None:
+        return None
+    return math.ceil(abs(profile.weight_kg - profile.target_weight_kg) / rate)
 
 
 def daily_calorie_target(profile: Profile, tdee: float) -> float:
-    """TDEE +/- the daily energy gap needed to hit the weekly rate."""
-    daily_gap = safe_weekly_rate(profile) * KCAL_PER_KG / 7
+    """TDEE +/- the daily energy gap needed for the weekly rate. At the target, it's maintenance."""
+    daily_gap = weekly_rate_kg(profile) * KCAL_PER_KG / 7
     if profile.goal == Goal.CUT:
         return max(tdee - daily_gap, MIN_KCAL[profile.sex])
     if profile.goal == Goal.BULK:
         return tdee + daily_gap
-    if profile.goal == Goal.RECOMP:
-        return max(tdee * (1 - RECOMP_DEFICIT_PCT), MIN_KCAL[profile.sex])
     return tdee
 
 

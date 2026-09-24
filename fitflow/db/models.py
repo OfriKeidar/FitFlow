@@ -14,13 +14,15 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(40))
     sex: Mapped[str] = mapped_column(String(10))
     age: Mapped[int]
     height_cm: Mapped[float]
     start_weight_kg: Mapped[float]
     activity: Mapped[str] = mapped_column(String(20))
     goal: Mapped[str] = mapped_column(String(20))
-    weekly_rate_kg: Mapped[float] = mapped_column(default=0.0)
+    target_weight_kg: Mapped[float | None] = mapped_column(default=None)
+    pace: Mapped[str] = mapped_column(String(20), default="recommended")
     weigh_in_frequency: Mapped[str] = mapped_column(String(10), default="weekly")
     weekly_workout_goal: Mapped[int] = mapped_column(default=3)
 

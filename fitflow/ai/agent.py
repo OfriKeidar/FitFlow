@@ -56,7 +56,7 @@ class CoachAgent:
         executor = ToolExecutor(session, user, today, hour)
 
         for _ in range(MAX_TOOL_ROUNDS):
-            response = self._call_model(history + new_messages)
+            response = self._call_model(history + new_messages, user.name)
 
             if response.stop_reason == "refusal":
                 # Don't save a refused turn: replaying it would only trigger the refusal again.
@@ -85,11 +85,14 @@ class CoachAgent:
         session.commit()  # the turn and its pending actions are saved together, or not at all
         return AgentReply(final_text(response), executor.proposed)
 
-    def _call_model(self, messages: list[dict]):
+    def _call_model(self, messages: list[dict], user_name: str):
+        # Note: one CoachAgent serves all users at once, so per-user data is passed in as
+        # arguments - never stored on `self`, where concurrent requests would overwrite it.
         return self.client.beta.messages.create(
             model=MODEL,
             max_tokens=MAX_TOKENS,
-            system=SYSTEM_PROMPT,
+            # The static prompt first (identical for everyone), then this user's name.
+            system=[{"type": "text", "text": SYSTEM_PROMPT}, {"type": "text", "text": f"The user's name is {user_name}."}],
             tools=TOOLS,
             messages=messages,
             output_config={"effort": EFFORT},

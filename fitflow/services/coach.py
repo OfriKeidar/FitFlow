@@ -1,18 +1,19 @@
 """The "smart" features: adaptive targets, meal suggestions, insights and progress."""
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fitflow.db import models as db
-from fitflow.domain.energy import daily_targets
+from fitflow.domain.energy import daily_targets, weekly_rate_kg, weeks_to_target
 from fitflow.domain.insights import Insight, generate_insights, week_start, weekly_workout_counts
-from fitflow.domain.models import DaySummary, Macros, WeighIn, WorkoutCategory, ZERO_MACROS
+from fitflow.domain.models import DaySummary, Macros, Profile, WeighIn, WorkoutCategory, ZERO_MACROS
 from fitflow.domain.optimizer import MealSuggestion, meal_for_hour, meal_target, suggest_meal
 from fitflow.domain.trend import TdeeUpdate, adaptive_tdee, weight_trend
+from fitflow.domain.workout_stats import WorkoutStats, workout_stats
 from fitflow.services.mappers import entry_macros, to_pantry_item, to_weigh_in, to_workout
 from fitflow.services.tracking import daily_status, profile_of, workout_entries
 
@@ -131,12 +132,37 @@ def week_summary(session: Session, user: db.User, day: date) -> WeekSummary:
 
 
 @dataclass(frozen=True)
+class Plan:
+    weekly_rate_kg: float
+    weeks_to_target: int | None
+    target_date: date | None
+
+
+def plan_for(profile: Profile, today: date) -> Plan:
+    """How fast the user moves towards the target weight, and roughly when they'll get there."""
+    weeks = weeks_to_target(profile)
+    target_date = today + timedelta(weeks=weeks) if weeks is not None else None
+    return Plan(round(weekly_rate_kg(profile), 2), weeks, target_date)
+
+
+@dataclass(frozen=True)
 class Progress:
     weigh_ins: list[WeighIn]
     trend: list[WeighIn]
     tdee: float
+    plan: Plan
 
 
-def progress(session: Session, user: db.User) -> Progress:
+def progress(session: Session, user: db.User, today: date) -> Progress:
     weigh_ins = _weigh_ins(session, user)
-    return Progress(weigh_ins, weight_trend(weigh_ins), user.tdee)
+    trend = weight_trend(weigh_ins)
+    # Project from the smoothed weight, not the last (noisy) reading.
+    profile = profile_of(session, user)
+    if trend:
+        profile = replace(profile, weight_kg=trend[-1].weight_kg)
+    return Progress(weigh_ins, trend, user.tdee, plan_for(profile, today))
+
+
+def stats(session: Session, user: db.User, today: date) -> WorkoutStats:
+    workouts = [to_workout(w) for w in workout_entries(session, user, date.min, today)]
+    return workout_stats(workouts, user.weekly_workout_goal, today)

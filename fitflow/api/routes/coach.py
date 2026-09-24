@@ -5,8 +5,8 @@ from fastapi import APIRouter, Query
 
 from fitflow.api.deps import DB, CurrentUser, Today
 from fitflow.api.schemas import (
-    DailyStatusOut, InsightOut, MacrosOut, MealSuggestionOut, ProgressOut, SuggestedItem,
-    TargetUpdateOut, WeekOut, WeightOut,
+    DailyStatusOut, InsightOut, MacrosOut, MealSuggestionOut, PlanOut, ProgressOut, SuggestedItem,
+    TargetUpdateOut, WeekOut, WeightOut, WorkoutStatsOut,
 )
 from fitflow.services import coach, tracking
 
@@ -62,11 +62,19 @@ def workouts_week(user: CurrentUser, db: DB, today: Today, day: date | None = No
     )
 
 
+@router.get("/workouts/stats", response_model=WorkoutStatsOut)
+def workouts_stats(user: CurrentUser, db: DB, today: Today):
+    return asdict(coach.stats(db, user, today))
+
+
 @router.get("/progress", response_model=ProgressOut)
-def progress(user: CurrentUser, db: DB):
-    p = coach.progress(db, user)
+def progress(user: CurrentUser, db: DB, today: Today):
+    p = coach.progress(db, user, today)
     return ProgressOut(
         weigh_ins=[WeightOut.model_validate(w) for w in p.weigh_ins],
         trend=[WeightOut(day=w.day, weight_kg=round(w.weight_kg, 2)) for w in p.trend],
         tdee=round(p.tdee),
+        start_weight_kg=user.start_weight_kg,
+        target_weight_kg=user.target_weight_kg,
+        plan=PlanOut(**asdict(p.plan)),
     )

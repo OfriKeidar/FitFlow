@@ -4,7 +4,7 @@ import { api, errorMessage, setUserId } from '../api/client'
 import type { Progress as ProgressData } from '../api/types'
 import { Icon } from '../components/Icon'
 import { useApi } from '../hooks/useApi'
-import { GOAL_LABELS } from '../labels'
+import { GOAL_LABELS, formatDate } from '../labels'
 
 export function Progress() {
   const progress = useApi(api.progress)
@@ -16,6 +16,7 @@ export function Progress() {
         <h1>התקדמות</h1>
         {me.data && <span className="muted">{GOAL_LABELS[me.data.goal]}</span>}
       </div>
+      {progress.data?.target_weight_kg != null && <TargetCard data={progress.data} />}
       {progress.data ? <WeightChart data={progress.data} /> : <div className="skeleton" style={{ height: 260 }} />}
       <WeighIn onLogged={progress.reload} />
       {progress.data && (
@@ -30,6 +31,41 @@ export function Progress() {
         <Icon name="logout" size={16} /> התחלה מחדש עם פרופיל חדש
       </button>
     </>
+  )
+}
+
+/** Start -> now -> target, with how much of the way is done and the estimated arrival date. */
+function TargetCard({ data }: { data: ProgressData }) {
+  const target = data.target_weight_kg!
+  const now = data.trend.length ? data.trend[data.trend.length - 1].weight_kg : data.start_weight_kg
+  const total = Math.abs(target - data.start_weight_kg)
+  // "Done" only counts movement in the right direction (gaining during a cut isn't progress).
+  const done = Math.max(0, Math.sign(target - data.start_weight_kg) * (now - data.start_weight_kg))
+  const percent = total > 0 ? Math.min(100, (done / total) * 100) : 100
+  const reached = data.plan.weeks_to_target === null
+
+  return (
+    <div className="card stack">
+      <div className="row">
+        <h2><Icon name="flag" /> היעד שלך</h2>
+        <strong>{Math.round(percent)}%</strong>
+      </div>
+      <div className="bar" style={{ height: 10 }}>
+        <i style={{ width: `${percent}%`, background: 'var(--accent)' }} />
+      </div>
+      <div className="row muted">
+        <span>התחלה {data.start_weight_kg} ק"ג</span>
+        <span>עכשיו {now.toFixed(1)}</span>
+        <span>יעד {target} ק"ג</span>
+      </div>
+      {reached
+        ? <p className="banner accent pop"><Icon name="trophy" /> הגעת ליעד! היעדים עברו לשמירה על המשקל.</p>
+        : data.plan.target_date && (
+          <p className="muted">
+            בקצב הנוכחי תגיע ליעד בערך ב־{formatDate(data.plan.target_date)} ({data.plan.weeks_to_target} שבועות)
+          </p>
+        )}
+    </div>
   )
 }
 

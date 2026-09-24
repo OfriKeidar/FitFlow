@@ -3,10 +3,11 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 Sex = Literal["male", "female"]
-GoalName = Literal["cut", "maintain", "bulk", "recomp"]
+GoalName = Literal["cut", "maintain", "bulk"]
+PaceName = Literal["relaxed", "recommended", "fast"]
 ActivityName = Literal["sedentary", "light", "active"]
 Frequency = Literal["daily", "weekly", "monthly"]
 
@@ -29,20 +30,41 @@ class MacrosOut(ORM):
 # --- users ---
 
 class UserCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
     sex: Sex
     age: int = Field(ge=14, le=100)
     height_cm: float = Field(ge=120, le=230)
     weight_kg: float = Field(ge=35, le=300)
     activity: ActivityName
     goal: GoalName
-    weekly_rate_kg: float = Field(default=0.0, ge=0, le=1.5)
+    target_weight_kg: float | None = Field(default=None, ge=35, le=300)
+    pace: PaceName = "recommended"
     weigh_in_frequency: Frequency = "weekly"
     weekly_workout_goal: int = Field(default=3, ge=0, le=14)
 
+    @model_validator(mode="after")
+    def target_matches_goal(self):
+        check_target(self.goal, self.weight_kg, self.target_weight_kg)
+        return self
+
+
+def check_target(goal: str, weight_kg: float, target_kg: float | None) -> None:
+    """Cutting needs a lower target, bulking a higher one; maintaining needs none."""
+    if goal == "maintain":
+        return
+    if target_kg is None:
+        raise ValueError("target_weight_kg is required for cut and bulk")
+    if goal == "cut" and target_kg >= weight_kg:
+        raise ValueError("for a cut, the target weight must be below the current weight")
+    if goal == "bulk" and target_kg <= weight_kg:
+        raise ValueError("for a bulk, the target weight must be above the current weight")
+
 
 class UserUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=40)
     goal: GoalName | None = None
-    weekly_rate_kg: float | None = Field(default=None, ge=0, le=1.5)
+    target_weight_kg: float | None = Field(default=None, ge=35, le=300)
+    pace: PaceName | None = None
     activity: ActivityName | None = None
     weigh_in_frequency: Frequency | None = None
     weekly_workout_goal: int | None = Field(default=None, ge=0, le=14)
@@ -50,15 +72,24 @@ class UserUpdate(BaseModel):
 
 class UserOut(ORM):
     id: int
+    name: str
     sex: Sex
     age: int
     height_cm: float
     activity: ActivityName
     goal: GoalName
-    weekly_rate_kg: float
+    target_weight_kg: float | None
+    pace: PaceName
     weigh_in_frequency: Frequency
     weekly_workout_goal: int
     tdee: float
+
+
+class PlanOut(BaseModel):
+    """How the chosen goal plays out: speed, and when the target is reached."""
+    weekly_rate_kg: float
+    weeks_to_target: int | None
+    target_date: date | None
 
 
 # --- foods & pantry ---
@@ -186,6 +217,20 @@ class ProgressOut(BaseModel):
     weigh_ins: list[WeightOut]
     trend: list[WeightOut]
     tdee: float
+    start_weight_kg: float
+    target_weight_kg: float | None
+    plan: PlanOut
+
+
+class WorkoutStatsOut(BaseModel):
+    total_workouts: int
+    days_since_last: int | None
+    this_month: int
+    minutes_this_week: float
+    current_week_streak: int
+    best_week_streak: int
+    best_day_streak: int
+    favorite_activity: str | None
 
 
 # --- chat ---

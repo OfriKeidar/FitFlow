@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { api, errorMessage } from '../api/client'
-import type { Week, WorkoutCategory } from '../api/types'
+import type { Week, WorkoutCategory, WorkoutStats } from '../api/types'
 import { Icon, type IconName } from '../components/Icon'
 import { useApi } from '../hooks/useApi'
-import { ACTIVITY_NAMES, CATEGORY_LABELS } from '../labels'
+import { ACTIVITY_NAMES, CATEGORY_LABELS, activityName } from '../labels'
+import { useUser } from '../user'
 
 const CATEGORY_STYLE: Record<WorkoutCategory, { icon: IconName; color: string }> = {
   strength: { icon: 'barbell', color: 'var(--strength)' },
@@ -14,6 +15,7 @@ const DAY_LETTERS = ['א\'', 'ב\'', 'ג\'', 'ד\'', 'ה\'', 'ו\'', 'ש\'']
 
 export function Workouts() {
   const week = useApi(api.week)
+  const stats = useApi(api.workoutStats)
   const insights = useApi(api.insights)
 
   return (
@@ -28,7 +30,8 @@ export function Workouts() {
       </div>
 
       {week.data ? <WeekSummary week={week.data} /> : <div className="skeleton" style={{ height: 200 }} />}
-      <LogWorkout onLogged={() => { week.reload(); insights.reload() }} />
+      {stats.data && <StatsGrid stats={stats.data} />}
+      <LogWorkout onLogged={() => { week.reload(); stats.reload(); insights.reload() }} />
 
       <h2>תובנות</h2>
       {insights.data?.length === 0 && (
@@ -41,6 +44,37 @@ export function Workouts() {
         </div>
       ))}
     </>
+  )
+}
+
+function lastWorkoutText(days: number | null): string {
+  if (days === null) return 'עוד לא'
+  if (days === 0) return 'היום'
+  if (days === 1) return 'אתמול'
+  return `לפני ${days} ימים`
+}
+
+function StatsGrid({ stats }: { stats: WorkoutStats }) {
+  const items: { icon: IconName; color: string; label: string; value: string }[] = [
+    { icon: 'clock', color: 'var(--carbs)', label: 'אימון אחרון', value: lastWorkoutText(stats.days_since_last) },
+    { icon: 'flame', color: '#D85A30', label: 'רצף שבועות ביעד', value: `${stats.current_week_streak} שבועות` },
+    { icon: 'trophy', color: 'var(--fat)', label: 'השיא שלך', value: `${stats.best_week_streak} שבועות` },
+    { icon: 'calendar', color: 'var(--accent)', label: 'החודש', value: `${stats.this_month} אימונים` },
+    { icon: 'run', color: 'var(--cardio)', label: 'דקות השבוע', value: `${Math.round(stats.minutes_this_week)}` },
+    { icon: 'heart', color: 'var(--danger)', label: 'האהוב עליך', value: stats.favorite_activity ? activityName(stats.favorite_activity) : '—' },
+  ]
+  return (
+    <div className="grid-2">
+      {items.map((item) => (
+        <div key={item.label} className="stat-tile">
+          <span className="stat-icon" style={{ color: item.color }}><Icon name={item.icon} size={18} /></span>
+          <span>
+            <div className="muted" style={{ fontSize: 12 }}>{item.label}</div>
+            <div className="stat-value">{item.value}</div>
+          </span>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -58,6 +92,7 @@ function WeekSummary({ week }: { week: Week }) {
   })
   const maxMinutes = Math.max(60, ...days.map((d) => d.minutes))
   const goalReached = total(week) >= week.goal
+  const user = useUser()
 
   return (
     <div className="card stack">
@@ -84,7 +119,7 @@ function WeekSummary({ week }: { week: Week }) {
           </div>
         ))}
       </div>
-      {goalReached && <p className="banner accent pop"><Icon name="check" /> הגעת ליעד האימונים השבועי!</p>}
+      {goalReached && <p className="banner accent pop"><Icon name="trophy" /> כל הכבוד {user.name}, הגעת ליעד האימונים השבועי!</p>}
     </div>
   )
 }

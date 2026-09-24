@@ -5,7 +5,7 @@ Keeping this in one place means the domain layer never imports SQLAlchemy.
 
 from fitflow.db import models as db
 from fitflow.domain.models import (
-    ActivityLevel, Food, FoodCategory, Goal, Macros, Meal, PantryItem, Profile, Sex,
+    ActivityLevel, Food, FoodCategory, Goal, Macros, Meal, Pace, PantryItem, Profile, Sex,
     WeighIn, WeighInFrequency, Workout, WorkoutCategory,
 )
 
@@ -18,7 +18,8 @@ def to_profile(user: db.User, current_weight_kg: float) -> Profile:
         weight_kg=current_weight_kg,
         activity=ActivityLevel[user.activity.upper()],
         goal=Goal(user.goal),
-        weekly_rate_kg=user.weekly_rate_kg,
+        target_weight_kg=user.target_weight_kg,
+        pace=Pace(user.pace),
         weigh_in_frequency=WeighInFrequency[user.weigh_in_frequency.upper()],
         weekly_workout_goal=user.weekly_workout_goal,
     )

@@ -1,7 +1,8 @@
 // TypeScript mirrors of the backend's response schemas (fitflow/api/schemas.py).
 // Keeping them in one file makes it easy to see the whole API contract.
 
-export type Goal = 'cut' | 'maintain' | 'bulk' | 'recomp'
+export type Goal = 'cut' | 'maintain' | 'bulk'
+export type Pace = 'relaxed' | 'recommended' | 'fast'
 export type ActivityLevel = 'sedentary' | 'light' | 'active'
 export type Frequency = 'daily' | 'weekly' | 'monthly'
 export type WorkoutCategory = 'strength' | 'cardio' | 'other'
@@ -14,13 +15,15 @@ export interface Macros {
 }
 
 export interface UserCreate {
+  name: string
   sex: 'male' | 'female'
   age: number
   height_cm: number
   weight_kg: number
   activity: ActivityLevel
   goal: Goal
-  weekly_rate_kg: number
+  target_weight_kg: number | null // null when maintaining
+  pace: Pace
   weigh_in_frequency: Frequency
   weekly_workout_goal: number
 }
@@ -104,10 +107,30 @@ export interface WeightPoint {
   weight_kg: number
 }
 
+export interface Plan {
+  weekly_rate_kg: number
+  weeks_to_target: number | null
+  target_date: string | null
+}
+
 export interface Progress {
   weigh_ins: WeightPoint[]
   trend: WeightPoint[]
   tdee: number
+  start_weight_kg: number
+  target_weight_kg: number | null
+  plan: Plan
+}
+
+export interface WorkoutStats {
+  total_workouts: number
+  days_since_last: number | null
+  this_month: number
+  minutes_this_week: number
+  current_week_streak: number
+  best_week_streak: number
+  best_day_streak: number
+  favorite_activity: string | null
 }
 
 export interface PendingAction {
