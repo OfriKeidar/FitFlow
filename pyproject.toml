@@ -1,0 +1,19 @@
+[project]
+name = "fitflow"
+version = "0.1.0"
+description = "Adaptive nutrition & training coach: deterministic algorithms at the core, AI at the edges."
+requires-python = ">=3.11"
+dependencies = [
+    "pulp>=2.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = [
+    # PuLP 3.x warns about its bundled CBC solver; no pip-installable replacement on Windows yet.
+    "ignore:PULP_CBC_CMD is deprecated:DeprecationWarning",
+]
