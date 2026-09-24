@@ -81,8 +81,9 @@ function CalorieCard({ status }: { status: DailyStatus }) {
 
 function Stat({ icon, label, value }: { icon: IconName; label: string; value: number }) {
   return (
-    <div className="tile">
-      <div className="muted row" style={{ justifyContent: 'center', gap: 4 }}><Icon name={icon} size={14} /> {label}</div>
+    <div className="tile stack" style={{ alignItems: 'center', gap: 2 }}>
+      <span className="muted" style={{ lineHeight: 0 }}><Icon name={icon} size={16} /></span>
+      <div className="muted" style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{label}</div>
       <div style={{ fontSize: 17, fontWeight: 500 }}>{value}</div>
     </div>
   )

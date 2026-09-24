@@ -59,6 +59,11 @@ def main() -> None:
             weight += (intake - TRUE_TDEE - burned) / KCAL_PER_KG
             tracking.log_weight(db, user, round(weight + rng.uniform(-0.6, 0.6), 1), day)
 
+        # Today: breakfast and lunch already logged, so the dashboard shows progress.
+        today_meals = [("ביצה", 2), ("לחם מלא", 2), ("קוטג' 5%", 1), ("חזה עוף", 1.5), ("אורז לבן", 1.5), ("סלט ירקות", 1)]
+        for name, servings in today_meals:
+            tracking.log_food(db, user, db.query(Food).filter_by(name=name).one(), servings, today)
+
         pantry = ["חזה עוף", "ביצה", "אורז לבן", "בטטה", "קוטג' 5%", "סלט ירקות", "טונה במים", "לחם מלא"]
         for name in pantry:
             food = db.query(Food).filter_by(name=name).one()

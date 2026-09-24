@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CartesianGrid, ComposedChart, Line, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts'
+import { CartesianGrid, ComposedChart, Line, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis, ZAxis } from 'recharts'
 import { api, errorMessage, logout } from '../api/client'
 import type { Progress as ProgressData } from '../api/types'
 import { Icon } from '../components/Icon'
@@ -95,7 +95,8 @@ function WeightChart({ data }: { data: ProgressData }) {
         <span className="muted">
           <span style={{ color: 'var(--accent)' }}>━</span> מגמה  <span style={{ color: 'var(--text-3)' }}>●</span> שקילות
         </span>
-        <strong>{change > 0 ? '+' : ''}{change.toFixed(1)} ק"ג</strong>
+        {/* dir="ltr" keeps the sign on the left of the number inside right-to-left text: "-2.1", not "2.1-" */}
+        <strong><span dir="ltr">{change > 0 ? '+' : ''}{change.toFixed(1)}</span> ק"ג</strong>
       </div>
       {/* The chart reads left-to-right (time axis) even in a right-to-left page. */}
       <div dir="ltr" style={{ height: 220 }}>
@@ -109,6 +110,7 @@ function WeightChart({ data }: { data: ProgressData }) {
               contentStyle={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 8 }}
               formatter={(v) => `${Number(v).toFixed(1)} ק"ג`}
             />
+            <ZAxis range={[28, 28]} /> {/* dot size for the weigh-ins */}
             <Scatter dataKey="weight" name="שקילה" fill="var(--text-3)" />
             <Line dataKey="trend" name="מגמה" stroke="var(--accent)" strokeWidth={2.5} dot={false} type="monotone" />
           </ComposedChart>
