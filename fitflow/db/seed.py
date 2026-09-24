@@ -1,4 +1,4 @@
-"""Loads the starter food database (data/foods.json) into an empty foods table."""
+"""Loads the starter food database (fitflow/data/foods.json) into an empty foods table."""
 
 import json
 from pathlib import Path
@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from fitflow.db.models import Food
 
-FOODS_FILE = Path(__file__).resolve().parents[2] / "data" / "foods.json"
+# Shipped inside the package (see [tool.setuptools.package-data]), so it works when installed too.
+FOODS_FILE = Path(__file__).resolve().parent.parent / "data" / "foods.json"
 
 
 def seed_foods(db: Session) -> int:

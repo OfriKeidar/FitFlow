@@ -203,11 +203,12 @@ function targetProblem(form: UserCreate): string | null {
 
 /** Target weight + pace, with a live "you'll get there around <date>" preview from the server. */
 function TargetPicker({ form, update }: { form: UserCreate; update: (p: Partial<UserCreate>) => void }) {
-  const [plan, setPlan] = useState<Plan | null>(null)
+  const [fetchedPlan, setPlan] = useState<Plan | null>(null)
   const valid = targetProblem(form) === null
+  const plan = valid ? fetchedPlan : null // never show a plan for an invalid target
 
   useEffect(() => {
-    if (!valid) return setPlan(null)
+    if (!valid) return
     // Debounce: wait until the user stops typing before asking the server.
     const timer = setTimeout(() => {
       api.planPreview(form.goal, form.weight_kg, form.target_weight_kg!, form.pace).then(setPlan).catch(() => setPlan(null))

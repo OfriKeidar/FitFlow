@@ -1,0 +1,30 @@
+# Run the whole stack locally, the same way it runs in production:
+#   docker compose up --build        ->  http://localhost:8000
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fitflow
+      POSTGRES_PASSWORD: fitflow
+      POSTGRES_DB: fitflow
+    volumes:
+      - pgdata:/var/lib/postgresql/data  # keep data between restarts
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fitflow"]
+      interval: 2s
+      retries: 15
+
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://fitflow:fitflow@db:5432/fitflow
+      JWT_SECRET: ${JWT_SECRET:-local-compose-secret-change-me}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}  # optional: enables the AI coach
+    depends_on:
+      db:
+        condition: service_healthy  # wait until Postgres accepts connections
+
+volumes:
+  pgdata:

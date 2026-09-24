@@ -162,6 +162,23 @@ src/pages/      Onboarding, Today, Chat, Meal, Workouts, Progress
 - **Not done yet (good to mention):** rate limiting on login, email verification, password reset,
   and refresh tokens.
 
+## Deployment and CI
+- **One container** (`Dockerfile`, multi-stage): Node builds the frontend, and the final image contains only
+  Python and the built files. `fitflow/web.py` serves the API under `/api` and the React app at `/`,
+  from a single origin, so there's no CORS configuration.
+- **Single-page-app fallback:** unknown paths return `index.html`, so refreshing the browser on `/chat`
+  loads the app instead of a 404.
+- **PostgreSQL in production** (`DATABASE_URL`), SQLite locally. `postgres://` URLs from hosting platforms
+  are normalized for SQLAlchemy.
+- **Secrets only in environment variables:** `JWT_SECRET`, `ANTHROPIC_API_KEY`. None are in git.
+- **The container doesn't run as root**, and `/api/health` answers the platform's health checks.
+- **CI (GitHub Actions)** runs on every push: the Python tests on SQLite **and on PostgreSQL**, frontend lint
+  and build (including the type check), and a Docker build followed by a smoke test that starts the
+  container and checks the API and the app respond.
+- **Packaging bugs found while building this:** `pip install -e .` failed (setuptools doesn't allow
+  several top-level folders in a flat layout), and the food database lived outside the package, so an
+  installed app couldn't find it. Both are fixed in `pyproject.toml`.
+
 ## Database design decisions
 - **Nutrition snapshots.** A log entry copies the food's values at logging time. Fixing a food in
   the database later doesn't silently rewrite the user's history.
@@ -178,6 +195,6 @@ src/pages/      Onboarding, Today, Chat, Meal, Workouts, Progress
 `POST /chat` · `GET /chat/history` · `GET /chat/actions` · `POST /chat/actions/{id}/confirm` · `/reject`
 
 ## Tests
-`pytest` runs 86 tests. They include a simulated user with a known TDEE and noisy weigh-ins,
+`pytest` runs 89 tests. They include a simulated user with a known TDEE and noisy weigh-ins,
 checking that the algorithm recovers the TDEE for daily, weekly and monthly weigh-ins, plus
 end-to-end API tests and agent tests with a fake LLM.

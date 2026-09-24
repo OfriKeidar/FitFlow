@@ -10,9 +10,20 @@ from sqlalchemy.pool import StaticPool
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///fitflow.db")
 
 
+def normalize_url(url: str) -> str:
+    """Hosting platforms hand out "postgres://..." URLs; SQLAlchemy needs the driver named explicitly."""
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
 def make_engine(url: str = DATABASE_URL, **kwargs) -> Engine:
+    url = normalize_url(url)
     if url.startswith("sqlite"):
         kwargs.setdefault("connect_args", {"check_same_thread": False})
+    else:
+        kwargs.setdefault("pool_pre_ping", True)  # replace connections the database closed while idle
     if url == "sqlite://":  # in-memory DB (tests): share one connection, or each one gets an empty DB
         kwargs.setdefault("poolclass", StaticPool)
     return create_engine(url, **kwargs)

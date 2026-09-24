@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "fitflow"
 version = "0.1.0"
@@ -15,6 +19,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "httpx>=0.27"]
+postgres = ["psycopg[binary]>=3.1"]
+
+[tool.setuptools.packages.find]
+# Only the app itself is a package; tests/ and scripts/ are run from the repo.
+include = ["fitflow*"]
+
+[tool.setuptools.package-data]
+fitflow = ["data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

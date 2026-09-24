@@ -26,7 +26,7 @@ Recharts for the frontend: a mobile-first, right-to-left Hebrew web app with dar
 # Backend
 python -m venv .venv
 .venv/Scripts/pip install -e ".[dev]"
-.venv/Scripts/python -m pytest                     # 86 tests
+.venv/Scripts/python -m pytest                     # 89 tests
 .venv/Scripts/uvicorn fitflow.api.main:app         # API + docs at http://localhost:8000/docs
 
 # Frontend (in a second terminal)
@@ -39,6 +39,11 @@ Optional demo data (5 weeks of history, so charts and insights have something to
 It creates the account `demo@fitflow.app` with password `demo1234`:
 ```bash
 .venv/Scripts/python -m scripts.seed_demo
+```
+
+Or run the full stack (app and PostgreSQL) the way it runs in production:
+```bash
+docker compose up --build                           # http://localhost:8000
 ```
 
 The AI coach needs an Anthropic API key in the `ANTHROPIC_API_KEY` environment variable.

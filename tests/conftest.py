@@ -1,7 +1,8 @@
 import os
 
 # Must be set before the app is imported, so tests never touch the real DB file.
-os.environ["DATABASE_URL"] = "sqlite://"
+# In-memory SQLite by default; CI also runs the suite against PostgreSQL via TEST_DATABASE_URL.
+os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL", "sqlite://")
 
 from datetime import date  # noqa: E402
 

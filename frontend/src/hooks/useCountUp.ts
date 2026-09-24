@@ -1,20 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 
+const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
 /**
  * Animate a number from its previous value to `target` (e.g. 0 -> 1787 on first load).
- * Small touch, but it makes the dashboard feel alive.
+ * Small touch, but it makes the dashboard feel alive. Users who prefer reduced motion get the
+ * final number right away.
  */
 export function useCountUp(target: number, durationMs = 700): number {
   const [value, setValue] = useState(0)
   const from = useRef(0)
 
   useEffect(() => {
-    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    if (reduceMotion) {
-      setValue(target)
-      from.current = target
-      return
-    }
+    if (reduceMotion) return
     const start = performance.now()
     const startValue = from.current
     let frame = 0
@@ -29,5 +27,5 @@ export function useCountUp(target: number, durationMs = 700): number {
     return () => cancelAnimationFrame(frame)
   }, [target, durationMs])
 
-  return value
+  return reduceMotion ? target : value
 }
