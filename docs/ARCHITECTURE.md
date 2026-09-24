@@ -32,7 +32,10 @@ the database or the LLM provider without touching a single algorithm.
   (total daily energy expenditure).
 - Calorie target = TDEE +/- (weekly rate x 7700 / 7). Losing 0.5 kg/week = a 550 kcal daily deficit.
 - Macros: protein by body weight, fat as 25% of calories, carbs fill the rest.
-- Goals: cut, maintain, bulk, and recomp (a 5% deficit with high protein).
+- Goals: cut, maintain or bulk, with a **target weight** and a pace (relaxed / recommended / fast).
+- **The pace is a share of body weight** (cut: 0.5-1% per week, bulk: 0.15-0.4%), not a fixed number
+  of kg, so it's safe for every body size. The app shows the estimated date the target is reached.
+- **Reaching the target switches the targets to maintenance** automatically.
 - **Safety limits:** at most 1% of body weight lost per week, and a minimum calorie floor.
 
 ### `activity.py` - workout calories
@@ -135,8 +138,29 @@ src/pages/      Onboarding, Today, Chat, Meal, Workouts, Progress
 2. **A whole day on one plate.** With nothing logged yet, the meal optimizer tried to fit the entire day's
    remaining calories into a single meal (3 servings of everything). Now each meal gets an even share
    of what's left, based on the meals remaining at that hour, capped at 40% of the daily target.
-3. **Missing API key crashed with a 500.** The SDK raises a `TypeError` when no credentials are
+3. **A shared object holding per-user data.** When adding the user's name to the AI prompt, it was
+   first stored on the shared `CoachAgent` (`self.user_name`). Two users chatting at the same moment
+   could then have seen each other's name. Now it's passed as an argument, and a comment explains why.
+4. **Inputs smaller than 16px.** iPhones zoom the whole page when such an input gets focus, which is
+   annoying on the login screen. All inputs are now 16px.
+5. **Missing API key crashed with a 500.** The SDK raises a `TypeError` when no credentials are
    configured. Now the dependency checks credentials first and returns a clear 503.
+
+## Authentication (`services/auth.py`)
+- **Passwords** are stored as a salted **scrypt** hash, never in plain text. scrypt is deliberately slow
+  and memory-hungry, so guessing passwords from a leaked database is expensive. A random salt per user
+  means equal passwords get different hashes. The check uses `hmac.compare_digest`, which takes the
+  same time wherever the difference is, so nothing leaks through response times.
+- **Login returns a JWT** signed with HS256. It contains the user id and an expiry (7 days). The server
+  keeps no sessions: it only checks the signature with a secret from the `JWT_SECRET` environment variable.
+- **Every protected endpoint** depends on `get_current_user`. Without a valid token the result is 401,
+  and the handler never runs.
+- **One error for "unknown email" and "wrong password"**, so attackers can't find out which emails are registered.
+- **Frontend:** the token lives in localStorage and every request sends `Authorization: Bearer ...`.
+  A 401 clears it and returns to the login screen. Trade-off: localStorage is readable by any script
+  on the page (XSS). An httpOnly cookie is safer, but it needs CSRF protection.
+- **Not done yet (good to mention):** rate limiting on login, email verification, password reset,
+  and refresh tokens.
 
 ## Database design decisions
 - **Nutrition snapshots.** A log entry copies the food's values at logging time. Fixing a food in
@@ -147,15 +171,13 @@ src/pages/      Onboarding, Today, Chat, Meal, Workouts, Progress
 - **Confirming an action twice returns 404**, so a double click never logs twice.
 
 ## API
-`POST /users` · `GET/PATCH /me` · `GET /foods?q=` · `GET/PUT/DELETE /pantry/{id}` · `/disliked/{id}`
+`POST /auth/register` · `POST /auth/login` · `GET/PATCH /me` · `GET /plan-preview` · `GET /foods?q=` · `GET/PUT/DELETE /pantry/{id}` · `/disliked/{id}`
 `POST /log/food` · `/log/custom-food` · `/log/workout` · `/log/weight` · `DELETE /log/...`
 `GET /today` (dashboard, plus the weekly target update) · `/coach/meal-suggestion?hour=` · `/coach/insights`
-`GET /workouts/week` · `/progress`
+`GET /workouts/week` · `/workouts/stats` · `/progress`
 `POST /chat` · `GET /chat/history` · `GET /chat/actions` · `POST /chat/actions/{id}/confirm` · `/reject`
 
-Authentication currently uses an `X-User-Id` header. It must be replaced with JWT before deployment.
-
 ## Tests
-`pytest` runs 70 tests. They include a simulated user with a known TDEE and noisy weigh-ins,
+`pytest` runs 86 tests. They include a simulated user with a known TDEE and noisy weigh-ins,
 checking that the algorithm recovers the TDEE for daily, weekly and monthly weigh-ins, plus
 end-to-end API tests and agent tests with a fake LLM.

@@ -2,7 +2,7 @@ from datetime import timedelta
 
 import pytest
 
-from tests.conftest import food_id
+from tests.conftest import PROFILE, food_id, register
 
 
 def test_create_user_computes_initial_tdee(client, user):
@@ -11,13 +11,8 @@ def test_create_user_computes_initial_tdee(client, user):
 
 
 def test_invalid_profile_is_rejected(client):
-    r = client.post("/users", json={"name": "A", "sex": "male", "age": 5, "height_cm": 180, "weight_kg": 80,
-                                    "activity": "sedentary", "goal": "maintain"})
+    r = client.post("/auth/register", json=PROFILE | {"age": 5, "email": "a@example.com", "password": "secret123"})
     assert r.status_code == 422
-
-
-def test_unknown_user_gets_404(client):
-    assert client.get("/me", headers={"X-User-Id": "999"}).status_code == 404
 
 
 def test_foods_are_seeded_and_searchable(client):
@@ -49,9 +44,8 @@ def test_unknown_workout_is_rejected(client, user):
 
 def test_cannot_delete_someone_elses_entry(client, user):
     entry = client.post("/log/custom-food", headers=user, json={"description": "פיצה", "kcal": 300}).json()
-    other = client.post("/users", json={"name": "B", "sex": "female", "age": 30, "height_cm": 165, "weight_kg": 60,
-                                        "activity": "light", "goal": "maintain"}).json()
-    r = client.delete(f"/log/food/{entry['id']}", headers={"X-User-Id": str(other["id"])})
+    other = register(client, email="other@example.com")
+    r = client.delete(f"/log/food/{entry['id']}", headers=other)
     assert r.status_code == 404
 
 
@@ -110,11 +104,12 @@ def test_no_banner_when_update_had_too_little_data(client, user, clock):
 
 
 def test_target_must_match_goal(client):
-    body = {"name": "A", "sex": "male", "age": 30, "height_cm": 180, "weight_kg": 80, "activity": "light"}
-    assert client.post("/users", json=body | {"goal": "cut", "target_weight_kg": 85}).status_code == 422
-    assert client.post("/users", json=body | {"goal": "bulk", "target_weight_kg": 75}).status_code == 422
-    assert client.post("/users", json=body | {"goal": "cut"}).status_code == 422  # target required
-    assert client.post("/users", json=body | {"goal": "maintain"}).status_code == 201
+    body = PROFILE | {"email": "a@example.com", "password": "secret123"}
+    assert client.post("/auth/register", json=body | {"goal": "cut", "target_weight_kg": 85}).status_code == 422
+    assert client.post("/auth/register", json=body | {"goal": "bulk", "target_weight_kg": 75}).status_code == 422
+    assert client.post("/auth/register", json=body | {"goal": "cut", "target_weight_kg": None}).status_code == 422
+    maintain = body | {"goal": "maintain", "target_weight_kg": None}
+    assert client.post("/auth/register", json=maintain).status_code == 201
 
 
 def test_plan_preview_estimates_the_target_date(client, clock):

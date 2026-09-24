@@ -14,6 +14,8 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(254), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(200))  # never the password itself - see services/auth.py
     name: Mapped[str] = mapped_column(String(40))
     sex: Mapped[str] = mapped_column(String(10))
     age: Mapped[int]

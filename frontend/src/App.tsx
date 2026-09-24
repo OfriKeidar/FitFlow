@@ -1,10 +1,11 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { ApiError, api, getUserId, setUserId } from './api/client'
-import type { User } from './api/types'
+import { ApiError, LOGGED_OUT_EVENT, api, getToken, setToken } from './api/client'
+import type { AuthResult, User } from './api/types'
 import { BottomNav } from './components/BottomNav'
 import { Loader } from './components/Logo'
 import { Chat } from './pages/Chat'
+import { Login } from './pages/Login'
 import { Meal } from './pages/Meal'
 import { Onboarding } from './pages/Onboarding'
 import { Today } from './pages/Today'
@@ -14,47 +15,51 @@ import { UserContext } from './user'
 // The progress page pulls in the charting library (~370 KB), so load it only when it's opened.
 const Progress = lazy(() => import('./pages/Progress').then((m) => ({ default: m.Progress })))
 
-type Session = 'checking' | 'onboarding' | 'ready' | 'offline'
+type Screen = 'checking' | 'login' | 'onboarding' | 'ready' | 'offline'
 
 export default function App() {
-  const [session, setSession] = useState<Session>(getUserId() ? 'checking' : 'onboarding')
+  const [screen, setScreen] = useState<Screen>(getToken() ? 'checking' : 'onboarding')
   const [user, setUser] = useState<User | null>(null)
 
-  // Load the saved user. The id may point to a user that no longer exists (e.g. the dev database was reset).
+  // With a saved token, load the user. An invalid or expired token triggers a logout (see client.ts).
   useEffect(() => {
-    if (session !== 'checking') return
+    if (screen !== 'checking') return
     api.me()
       .then((me) => {
         setUser(me)
-        setSession('ready')
+        setScreen('ready')
       })
-      .catch((e) => {
-        if (e instanceof ApiError && e.status === 404) {
-          setUserId(null)
-          setSession('onboarding')
-        } else {
-          setSession('offline')
-        }
-      })
-  }, [session])
+      .catch((e) => setScreen(e instanceof ApiError && e.status === 401 ? 'login' : 'offline'))
+  }, [screen])
 
-  function onboarded(newUser: User) {
-    setUserId(newUser.id)
-    setUser(newUser)
-    setSession('ready')
+  // Any request that gets a 401 logs out; this sends the user back to the login screen.
+  useEffect(() => {
+    const onLogout = () => {
+      setUser(null)
+      setScreen('login')
+    }
+    window.addEventListener(LOGGED_OUT_EVENT, onLogout)
+    return () => window.removeEventListener(LOGGED_OUT_EVENT, onLogout)
+  }, [])
+
+  function loggedIn(auth: AuthResult) {
+    setToken(auth.token)
+    setUser(auth.user)
+    setScreen('ready')
   }
 
   return (
     <main className="app">
-      {session === 'checking' && <Loader />}
-      {session === 'offline' && (
+      {screen === 'checking' && <Loader />}
+      {screen === 'offline' && (
         <div className="stack" style={{ marginTop: '30dvh', textAlign: 'center' }}>
           <p>אין חיבור לשרת</p>
-          <button className="btn" onClick={() => setSession('checking')}>לנסות שוב</button>
+          <button className="btn" onClick={() => setScreen('checking')}>לנסות שוב</button>
         </div>
       )}
-      {session === 'onboarding' && <Onboarding onDone={onboarded} />}
-      {session === 'ready' && user && (
+      {screen === 'login' && <Login onDone={loggedIn} onRegister={() => setScreen('onboarding')} />}
+      {screen === 'onboarding' && <Onboarding onDone={loggedIn} onLogin={() => setScreen('login')} />}
+      {screen === 'ready' && user && (
         <UserContext.Provider value={user}>
           <BrowserRouter>
             <Routes>

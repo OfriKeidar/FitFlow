@@ -2,31 +2,38 @@
 // Components never build URLs or headers themselves; they call these functions.
 
 import type {
-  ChatHistoryItem, ChatReply, DailyStatus, Food, Goal, Insight, MealSuggestion, PantryItem, Pace,
-  PendingAction, Plan, Progress, User, UserCreate, Week, Workout, WorkoutStats,
+  AuthResult, ChatHistoryItem, RegisterData, ChatReply, DailyStatus, Food, Goal, Insight, MealSuggestion, PantryItem, Pace,
+  PendingAction, Plan, Progress, User, Week, Workout, WorkoutStats,
 } from './types'
 
-const BASE = '/api' // proxied to FastAPI by Vite (see vite.config.ts)
-const USER_KEY = 'fitflow.userId'
+const BASE = import.meta.env.VITE_API_URL ?? '/api' // dev: proxied to FastAPI by Vite (see vite.config.ts)
+const TOKEN_KEY = 'fitflow.token'
+export const LOGGED_OUT_EVENT = 'fitflow:logged-out'
 
-// --- the logged-in user ---
-// TODO(auth): the backend identifies users by an X-User-Id header for now. Replace with JWT.
+// --- the login token (a JWT from /auth/login or /auth/register) ---
+// Kept in localStorage so the user stays logged in across visits. Trade-off: any script running on
+// the page could read it (XSS). The alternative, an httpOnly cookie, is safer but needs CSRF protection.
 
-export function getUserId(): string | null {
+export function getToken(): string | null {
   try {
-    return localStorage.getItem(USER_KEY)
+    return localStorage.getItem(TOKEN_KEY)
   } catch {
-    return null // storage can be blocked (private mode); the app then shows onboarding
+    return null // storage can be blocked (private mode); the user then logs in each visit
   }
 }
 
-export function setUserId(id: number | null) {
+export function setToken(token: string | null) {
   try {
-    if (id === null) localStorage.removeItem(USER_KEY)
-    else localStorage.setItem(USER_KEY, String(id))
+    if (token === null) localStorage.removeItem(TOKEN_KEY)
+    else localStorage.setItem(TOKEN_KEY, token)
   } catch {
-    // ignore - worst case the user onboards again
+    // ignore - worst case the user logs in again
   }
+}
+
+export function logout() {
+  setToken(null)
+  window.dispatchEvent(new Event(LOGGED_OUT_EVENT)) // App listens and shows the welcome screen
 }
 
 // --- core request helper ---
@@ -43,6 +50,7 @@ export class ApiError extends Error {
 
 /** What the user sees for each kind of failure (server messages are English and technical). */
 function userMessage(status: number): string {
+  if (status === 401) return 'צריך להתחבר מחדש'
   if (status === 404) return 'לא נמצא'
   if (status === 409) return 'הפעולה כבר לא אפשרית'
   if (status === 422) return 'חלק מהנתונים לא תקינים'
@@ -62,8 +70,8 @@ export function errorMessage(e: unknown): string {
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {}
-  const userId = getUserId()
-  if (userId) headers['X-User-Id'] = userId
+  const token = getToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
   if (body !== undefined) headers['Content-Type'] = 'application/json'
 
   const response = await fetch(BASE + path, {
@@ -71,6 +79,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   })
+  if (response.status === 401 && token) logout() // expired or invalid token -> back to login
   if (!response.ok) {
     // FastAPI errors look like {"detail": "..."}; fall back to the status text.
     const data = await response.json().catch(() => null)
@@ -88,7 +97,8 @@ const del = (path: string) => request<void>('DELETE', path)
 // --- endpoints ---
 
 export const api = {
-  createUser: (data: UserCreate) => post<User>('/users', data),
+  register: (data: RegisterData) => post<AuthResult>('/auth/register', data),
+  login: (email: string, password: string) => post<AuthResult>('/auth/login', { email, password }),
   me: () => get<User>('/me'),
   planPreview: (goal: Goal, weightKg: number, targetKg: number, pace: Pace) =>
     get<Plan>(`/plan-preview?goal=${goal}&weight_kg=${weightKg}&target_weight_kg=${targetKg}&pace=${pace}`),

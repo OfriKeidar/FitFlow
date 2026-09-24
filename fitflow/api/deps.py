@@ -5,12 +5,14 @@ from functools import lru_cache
 from typing import Annotated
 
 import anthropic
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from fitflow.ai.agent import CoachAgent
 from fitflow.db.models import User
 from fitflow.db.session import get_db
+from fitflow.services import auth
 
 DB = Annotated[Session, Depends(get_db)]
 
@@ -23,11 +25,15 @@ def get_today() -> date:
 Today = Annotated[date, Depends(get_today)]
 
 
-def get_current_user(db: DB, x_user_id: Annotated[int, Header()]) -> User:
-    # TODO(auth): replace the X-User-Id header with JWT login before deploying.
-    user = db.get(User, x_user_id)
+bearer = HTTPBearer(auto_error=False)  # reads "Authorization: Bearer <token>"
+
+
+def get_current_user(db: DB, credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]) -> User:
+    """Every protected endpoint depends on this: no valid token -> 401, and the handler never runs."""
+    user_id = auth.user_id_from_token(credentials.credentials) if credentials else None
+    user = db.get(User, user_id) if user_id is not None else None
     if user is None:
-        raise HTTPException(404, "User not found")
+        raise HTTPException(401, "Not authenticated", headers={"WWW-Authenticate": "Bearer"})
     return user
 
 

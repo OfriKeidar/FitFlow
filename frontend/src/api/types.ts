@@ -28,9 +28,20 @@ export interface UserCreate {
   weekly_workout_goal: number
 }
 
+export interface RegisterData extends UserCreate {
+  email: string
+  password: string
+}
+
 export interface User extends Omit<UserCreate, 'weight_kg'> {
   id: number
+  email: string
   tdee: number
+}
+
+export interface AuthResult {
+  token: string
+  user: User
 }
 
 export interface Food {

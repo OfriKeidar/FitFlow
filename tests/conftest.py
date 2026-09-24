@@ -34,15 +34,22 @@ def client(clock):
     app.dependency_overrides.clear()
 
 
+PROFILE = {
+    "name": "Dana", "sex": "male", "age": 25, "height_cm": 180, "weight_kg": 80,
+    "activity": "sedentary", "goal": "cut", "target_weight_kg": 72,
+}
+
+
+def register(client, email: str = "dana@example.com", password: str = "secret123", **overrides) -> dict:
+    """Registers a user and returns request headers that authenticate as them."""
+    r = client.post("/auth/register", json=PROFILE | overrides | {"email": email, "password": password})
+    assert r.status_code == 201, r.text
+    return {"Authorization": f"Bearer {r.json()['token']}"}
+
+
 @pytest.fixture
 def user(client):
-    """Creates a user and returns request headers authenticating as them."""
-    r = client.post("/users", json={
-        "name": "Dana", "sex": "male", "age": 25, "height_cm": 180, "weight_kg": 80,
-        "activity": "sedentary", "goal": "cut", "target_weight_kg": 72,
-    })
-    assert r.status_code == 201, r.text
-    return {"X-User-Id": str(r.json()["id"])}
+    return register(client)
 
 
 def food_id(client, name: str) -> int:

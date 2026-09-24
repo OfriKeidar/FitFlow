@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CartesianGrid, ComposedChart, Line, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts'
-import { api, errorMessage, setUserId } from '../api/client'
+import { api, errorMessage, logout } from '../api/client'
 import type { Progress as ProgressData } from '../api/types'
 import { Icon } from '../components/Icon'
 import { useApi } from '../hooks/useApi'
@@ -27,8 +27,8 @@ export function Progress() {
           </p>
         </div>
       )}
-      <button className="btn" onClick={() => { setUserId(null); location.reload() }}>
-        <Icon name="logout" size={16} /> התחלה מחדש עם פרופיל חדש
+      <button className="btn" onClick={logout}>
+        <Icon name="logout" size={16} /> התנתקות
       </button>
     </>
   )

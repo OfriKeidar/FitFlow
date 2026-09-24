@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api, errorMessage } from '../api/client'
-import type { ActivityLevel, Frequency, Goal, Pace, Plan, User, UserCreate } from '../api/types'
+import { ApiError, api, errorMessage } from '../api/client'
+import type { ActivityLevel, AuthResult, Frequency, Goal, Pace, Plan, UserCreate } from '../api/types'
 import { Icon, type IconName } from '../components/Icon'
 import { Loader, Logo } from '../components/Logo'
 import { ACTIVITY_LEVELS, FREQUENCY_LABELS, PACE_LABELS, formatDate } from '../labels'
@@ -13,13 +13,19 @@ const GOALS: { id: Goal; title: string; sub: string; icon: IconName; color: stri
 const ACTIVITY_ICONS: Record<ActivityLevel, IconName> = { sedentary: 'user', light: 'run', active: 'barbell' }
 const STEPS = 4
 
-export function Onboarding({ onDone }: { onDone: (user: User) => void }) {
+interface Props {
+  onDone: (auth: AuthResult) => void
+  onLogin: () => void // "I already have an account"
+}
+
+export function Onboarding({ onDone, onLogin }: Props) {
   const [step, setStep] = useState(1)
   const [form, setForm] = useState<UserCreate>({
     name: '', sex: 'male', age: 25, height_cm: 175, weight_kg: 75,
     activity: 'sedentary', goal: 'cut', target_weight_kg: 70, pace: 'recommended',
     weigh_in_frequency: 'weekly', weekly_workout_goal: 3,
   })
+  const [account, setAccount] = useState({ email: '', password: '' })
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -44,6 +50,10 @@ export function Onboarding({ onDone }: { onDone: (user: User) => void }) {
       if (!inRange(form.weight_kg, 35, 300)) return 'משקל צריך להיות בין 35 ל־300 ק"ג'
     }
     if (step === 2) return targetProblem(form)
+    if (step === 4) {
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(account.email)) return 'כתובת האימייל לא תקינה'
+      if (account.password.length < 8) return 'הסיסמה צריכה להיות באורך 8 תווים לפחות'
+    }
     return null
   }
 
@@ -54,12 +64,12 @@ export function Onboarding({ onDone }: { onDone: (user: User) => void }) {
 
     setSaving(true)
     try {
-      const user = await api.createUser({ ...form, name: form.name.trim() })
+      const auth = await api.register({ ...form, name: form.name.trim(), ...account })
       // Keep the loader up for a moment - the transition feels calmer than an instant jump.
-      setTimeout(() => onDone(user), 900)
+      setTimeout(() => onDone(auth), 900)
     } catch (e) {
       setSaving(false)
-      setError(errorMessage(e))
+      setError(e instanceof ApiError && e.status === 409 ? 'האימייל הזה כבר רשום. אפשר להתחבר במקום.' : errorMessage(e))
     }
   }
 
@@ -149,21 +159,34 @@ export function Onboarding({ onDone }: { onDone: (user: User) => void }) {
 
       {step === 4 && (
         <>
-          <h1>הכל מוכן, {form.name.trim()}!</h1>
-          <div className="card stack">
-            <p>אחשב לך יעד קלורי ומאקרו התחלתי, ואלמד מהנתונים שלך מה חילוף החומרים האמיתי שלך.</p>
-            <p className="muted">
-              אחרי שבועיים של רישום ושקילות, היעדים יתעדכנו אוטומטית לפי ההתקדמות בפועל.
-            </p>
-          </div>
+          <h1>כמעט סיימנו, {form.name.trim()}!</h1>
+          <p className="muted">
+            אחשב לך יעד קלורי ומאקרו התחלתי, ואלמד מהנתונים שלך מה חילוף החומרים האמיתי שלך.
+            נשאר רק ליצור חשבון, כדי שהנתונים יישמרו.
+          </p>
+          <label className="field">
+            אימייל
+            <input className="input" type="email" dir="ltr" autoComplete="email" value={account.email}
+                   onChange={(e) => { setAccount({ ...account, email: e.target.value.trim() }); setError(null) }} />
+          </label>
+          <label className="field">
+            סיסמה (8 תווים לפחות)
+            <input className="input" type="password" dir="ltr" autoComplete="new-password" value={account.password}
+                   onChange={(e) => { setAccount({ ...account, password: e.target.value }); setError(null) }} />
+          </label>
         </>
       )}
 
       {error && <p className="error-text">{error}</p>}
       <div className="row">
         {step > 1 ? <button className="btn" onClick={() => { setStep(step - 1); setError(null) }}>חזרה</button> : <span />}
-        <button className="btn primary" onClick={next}>{step < STEPS ? 'המשך' : 'יאללה, מתחילים'}</button>
+        <button className="btn primary" onClick={next}>{step < STEPS ? 'המשך' : 'יצירת חשבון'}</button>
       </div>
+      {step === 1 && (
+        <p className="muted" style={{ textAlign: 'center' }}>
+          כבר יש לך חשבון? <button className="link-button" onClick={onLogin}>התחברות</button>
+        </p>
+      )}
     </div>
   )
 }

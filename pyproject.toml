@@ -9,6 +9,8 @@ dependencies = [
     "sqlalchemy>=2.0",
     "uvicorn>=0.30",
     "anthropic>=1.8",
+    "pyjwt>=2.8",
+    "email-validator>=2",
 ]
 
 [project.optional-dependencies]

@@ -4,19 +4,12 @@ from fastapi import APIRouter, HTTPException, Query
 
 from fitflow.api.deps import DB, CurrentUser, Today
 from fitflow.api.schemas import (
-    GoalName, PaceName, PlanOut, UserCreate, UserOut, UserUpdate, check_target,
+    GoalName, PaceName, PlanOut, UserOut, UserUpdate, check_target,
 )
 from fitflow.domain.models import ActivityLevel, Goal, Pace, Profile, Sex
 from fitflow.services import coach, tracking
 
 router = APIRouter(tags=["users"])
-
-
-@router.post("/users", response_model=UserOut, status_code=201)
-def create_user(body: UserCreate, db: DB, today: Today):
-    fields = body.model_dump()
-    fields["start_weight_kg"] = fields.pop("weight_kg")
-    return tracking.create_user(db, today, **fields)
 
 
 @router.get("/me", response_model=UserOut)

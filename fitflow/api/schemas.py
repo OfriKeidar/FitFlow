@@ -3,7 +3,7 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_serializer, model_validator
 
 Sex = Literal["male", "female"]
 GoalName = Literal["cut", "maintain", "bulk"]
@@ -60,6 +60,16 @@ def check_target(goal: str, weight_kg: float, target_kg: float | None) -> None:
         raise ValueError("for a bulk, the target weight must be above the current weight")
 
 
+class RegisterIn(UserCreate):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+
+
+class LoginIn(BaseModel):
+    email: EmailStr
+    password: str = Field(max_length=128)
+
+
 class UserUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=40)
     goal: GoalName | None = None
@@ -72,6 +82,7 @@ class UserUpdate(BaseModel):
 
 class UserOut(ORM):
     id: int
+    email: str
     name: str
     sex: Sex
     age: int
@@ -83,6 +94,11 @@ class UserOut(ORM):
     weigh_in_frequency: Frequency
     weekly_workout_goal: int
     tdee: float
+
+
+class AuthOut(BaseModel):
+    token: str
+    user: UserOut
 
 
 class PlanOut(BaseModel):

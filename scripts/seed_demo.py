@@ -1,7 +1,7 @@
 """Create a demo user with 5 weeks of realistic history, so every screen has something to show.
 
 Usage:  .venv/Scripts/python -m scripts.seed_demo
-Then open the app and paste the printed snippet into the browser console to log in as the demo user.
+Then log in to the app as demo@fitflow.app / demo1234.
 
 The simulated user:
   - cuts from 84 kg, with a real TDEE of ~2650 kcal (higher than the formula's guess, so the
@@ -17,8 +17,9 @@ from fitflow.db.models import Base, Food, PantryItem
 from fitflow.db.seed import seed_foods
 from fitflow.db.session import SessionLocal, engine
 from fitflow.domain.models import KCAL_PER_KG, Macros
-from fitflow.services import tracking
+from fitflow.services import auth, tracking
 
+DEMO_EMAIL, DEMO_PASSWORD = "demo@fitflow.app", "demo1234"
 DAYS = 35
 TRUE_TDEE = 2650
 rng = random.Random(7)  # fixed seed: the same demo data every run
@@ -32,7 +33,7 @@ def main() -> None:
         start = today - timedelta(days=DAYS)
 
         user = tracking.create_user(
-            db, start, name="דנה", sex="male", age=27, height_cm=178, start_weight_kg=84.0,
+            db, start, email=DEMO_EMAIL, password_hash=auth.hash_password(DEMO_PASSWORD), name="דנה", sex="male", age=27, height_cm=178, start_weight_kg=84.0,
             activity="sedentary", goal="cut", target_weight_kg=76.0, pace="recommended",
             weigh_in_frequency="daily", weekly_workout_goal=4,
         )
@@ -67,9 +68,8 @@ def main() -> None:
         user.tdee_updated_on = start
         db.commit()
 
-        print(f"Demo user id: {user.id} (formula TDEE: {user.tdee:.0f}, true TDEE: {TRUE_TDEE})")
-        print("Log in as the demo user - paste in the browser console on the app, then reload:")
-        print(f"  localStorage.setItem('fitflow.userId', '{user.id}')")
+        print(f"Demo user created (formula TDEE: {user.tdee:.0f}, true TDEE: {TRUE_TDEE})")
+        print(f"Log in with: {DEMO_EMAIL} / {DEMO_PASSWORD}")
 
 
 if __name__ == "__main__":
