@@ -17,6 +17,7 @@ class Goal(Enum):
     CUT = "cut"
     MAINTAIN = "maintain"
     BULK = "bulk"
+    RECOMP = "recomp"  # small deficit + high protein: lose fat and build muscle together
 
 
 class ActivityLevel(Enum):
@@ -39,6 +40,12 @@ class Meal(Enum):
     SNACK = "snack"
 
 
+class WorkoutCategory(Enum):
+    STRENGTH = "strength"
+    CARDIO = "cardio"
+    OTHER = "other"
+
+
 class FoodCategory(Enum):
     PROTEIN = "protein"
     CARB = "carb"
@@ -58,6 +65,7 @@ class Profile:
     goal: Goal
     weekly_rate_kg: float = 0.0  # desired change per week, always positive (direction comes from goal)
     weigh_in_frequency: WeighInFrequency = WeighInFrequency.WEEKLY
+    weekly_workout_goal: int = 3
 
 
 @dataclass(frozen=True)
@@ -116,3 +124,21 @@ class PantryItem:
 class WeighIn:
     day: date
     weight_kg: float
+
+
+@dataclass(frozen=True)
+class Workout:
+    day: date
+    activity: str
+    category: WorkoutCategory
+    minutes: float
+    kcal: float
+
+
+@dataclass(frozen=True)
+class DaySummary:
+    """Everything that happened on one day - the input for insights."""
+    day: date
+    intake: Macros
+    target: Macros
+    workouts: tuple[Workout, ...] = ()

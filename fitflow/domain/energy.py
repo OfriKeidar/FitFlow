@@ -10,8 +10,9 @@ from fitflow.domain.models import KCAL_PER_KG, Goal, Macros, Profile, Sex
 MAX_CUT_RATE_PCT = 0.01    # lose at most 1% of body weight per week
 MAX_BULK_RATE_PCT = 0.005  # gain at most 0.5% of body weight per week
 MIN_KCAL = {Sex.MALE: 1500, Sex.FEMALE: 1200}
+RECOMP_DEFICIT_PCT = 0.05  # recomp: eat ~5% under maintenance, no weight-rate target
 
-PROTEIN_G_PER_KG = {Goal.CUT: 2.2, Goal.MAINTAIN: 1.8, Goal.BULK: 1.8}
+PROTEIN_G_PER_KG = {Goal.CUT: 2.2, Goal.MAINTAIN: 1.8, Goal.BULK: 1.8, Goal.RECOMP: 2.2}
 FAT_SHARE = 0.25  # 25% of calories from fat; carbs fill the rest
 KCAL_PER_G_PROTEIN = 4
 KCAL_PER_G_CARB = 4
@@ -45,6 +46,8 @@ def daily_calorie_target(profile: Profile, tdee: float) -> float:
         return max(tdee - daily_gap, MIN_KCAL[profile.sex])
     if profile.goal == Goal.BULK:
         return tdee + daily_gap
+    if profile.goal == Goal.RECOMP:
+        return max(tdee * (1 - RECOMP_DEFICIT_PCT), MIN_KCAL[profile.sex])
     return tdee
 
 

@@ -52,3 +52,9 @@ def test_workout_calories_raise_todays_target():
     base = daily_targets(make_profile(), tdee=2500)
     with_workout = daily_targets(make_profile(), tdee=2500, workout_kcal=300)
     assert with_workout.kcal - base.kcal == pytest.approx(300)
+
+
+def test_recomp_is_small_deficit_with_high_protein():
+    p = make_profile(goal=Goal.RECOMP)
+    assert daily_calorie_target(p, tdee=2500) == pytest.approx(2375)
+    assert daily_targets(p, tdee=2500).protein_g == pytest.approx(2.2 * 80)

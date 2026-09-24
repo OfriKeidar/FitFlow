@@ -33,6 +33,17 @@ WEIGHTS = {
 }
 
 
+def meal_for_hour(hour: int) -> Meal:
+    """Users log one flat list per day, so we infer what kind of meal makes sense from the clock."""
+    if 5 <= hour < 11:
+        return Meal.BREAKFAST
+    if 11 <= hour < 16:
+        return Meal.LUNCH
+    if 16 <= hour < 18:
+        return Meal.SNACK
+    return Meal.DINNER
+
+
 @dataclass(frozen=True)
 class MealSuggestion:
     items: list[tuple[PantryItem, int]]  # (pantry item, servings)

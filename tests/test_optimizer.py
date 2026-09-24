@@ -52,3 +52,11 @@ def test_empty_pantry_returns_empty_suggestion():
 
 def test_nothing_left_to_eat_returns_empty_suggestion():
     assert suggest_meal(PANTRY, Macros(-100, 0, 0, 0), Meal.DINNER).items == []
+
+
+def test_meal_is_inferred_from_hour():
+    from fitflow.domain.optimizer import meal_for_hour
+    assert meal_for_hour(8) == Meal.BREAKFAST
+    assert meal_for_hour(13) == Meal.LUNCH
+    assert meal_for_hour(20) == Meal.DINNER
+    assert meal_for_hour(2) == Meal.DINNER  # late-night snack still "dinner-like"
