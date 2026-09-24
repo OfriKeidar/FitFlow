@@ -1,52 +1,80 @@
 # FitFlow
 
-Adaptive nutrition & training coach. Log meals and workouts in plain language; FitFlow tracks
-calories and macros, learns your real metabolism from your weight trend, and suggests meals
-from what you have at home.
+**An adaptive nutrition & training coach.** Tell it what you ate in plain language, and it tracks
+calories and macros, **learns your real metabolism from your own data**, and suggests meals from what
+you have at home using an optimization algorithm.
 
-**Deterministic algorithms at the core, AI at the edges.**
+A Hebrew, mobile-first web app. The design principle behind it: **deterministic algorithms at the core, AI at the edges.**
+The LLM turns free text into calls to tested code. It never makes up a number.
 
-| Component | Technique |
-|---|---|
-| Initial targets | Mifflin-St Jeor BMR, energy-balance deficit, safety caps |
-| Weight trend | Time-aware EWMA (works with daily / weekly / monthly weigh-ins) |
-| Adaptive TDEE | Energy balance + least-squares weight slope, damped, with data-sufficiency checks |
-| Meal suggestions | Integer Linear Programming (PuLP / CBC) over the user's pantry |
-| Workout burn | Net MET calculation, strength / cardio / other |
-| Insights | Weekend vs weekday intake, protein on training days, workout streaks |
-| Auth | scrypt password hashing, JWT bearer tokens |
-| Chat coach | Claude tool-use agent; proposes entries, the user confirms before anything is saved |
+<p align="center">
+  <img src="docs/screenshots/today.png" width="200" alt="Daily dashboard">
+  <img src="docs/screenshots/meal.png" width="200" alt="Meal suggestion from the pantry">
+  <img src="docs/screenshots/progress.png" width="200" alt="Progress and target">
+  <img src="docs/screenshots/workouts.png" width="200" alt="Workout stats">
+</p>
+<p align="center">
+  <img src="docs/screenshots/onboarding.png" width="200" alt="Onboarding with target date">
+  <img src="docs/screenshots/chat.png" width="200" alt="AI coach chat">
+  <img src="docs/screenshots/today-dark.png" width="200" alt="Dark mode">
+</p>
+
+## Highlights
+
+| | What | How |
+|---|---|---|
+| 🧠 | **Adaptive TDEE**: learns how many calories *you* actually burn | Energy balance + least-squares slope of the weight trend, damped and capped; works with daily, weekly or monthly weigh-ins |
+| 🍽️ | **"What should I eat?"** from what's at home | **Integer Linear Programming** (PuLP/CBC): servings × foods, pantry limits, sensible-meal constraints, weighted macro deviation |
+| 💬 | **AI coach**: "I ate 2 eggs and ran for 30 minutes" | Claude tool-use agent with a hand-written loop; **proposes** entries, and the user **confirms** before anything is saved |
+| 📈 | **Weight trend** without the daily water noise | Time-aware EWMA (alpha depends on the gap between weigh-ins) |
+| 🎯 | **Target date**: "you'll reach 70 kg around Nov 26" | Pace as a % of body weight (safe for every body size); switches to maintenance at the target |
+| 🔍 | **Insights** like "you eat 544 kcal more on weekends" | Statistics with minimum-data and minimum-effect thresholds, so it doesn't report noise |
+| 🔐 | **Auth** | scrypt password hashing, stateless JWT, same error for unknown email and wrong password |
+
+## Architecture
+
+```mermaid
+flowchart LR
+    UI["React + TypeScript<br/>(mobile-first, RTL)"] -->|"/api (JWT)"| API["FastAPI<br/>validation · auth"]
+    API --> SVC["services/<br/>use-cases"]
+    API --> AI["ai/<br/>Claude agent + tools"]
+    AI -->|"tool calls"| SVC
+    SVC --> DOM["domain/<br/>pure algorithms<br/>(no DB, no network)"]
+    SVC --> DB[("PostgreSQL / SQLite<br/>SQLAlchemy")]
+```
+
+- **`domain/`** holds the algorithms as pure functions: energy targets, adaptive TDEE, the ILP optimizer, insights. Most of the tests live here.
+- **`services/`** loads data, runs the domain logic and saves the results. `mappers.py` keeps SQLAlchemy out of the domain.
+- **`ai/`** is the agent loop, the tool definitions and the prompt. Write tools only create *pending actions*.
+- **`api/`** holds the FastAPI routes and Pydantic schemas. **`web.py`** serves the API and the built frontend from one origin.
+
+Design decisions, trade-offs and the bugs found along the way are in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ## Stack
-Python, FastAPI, SQLAlchemy, PuLP, the Anthropic SDK, and pytest for the backend. React, TypeScript, Vite and
-Recharts for the frontend: a mobile-first, right-to-left Hebrew web app with dark mode, installable as a PWA.
+**Backend:** Python 3.11, FastAPI, SQLAlchemy 2, PuLP, Anthropic SDK, PyJWT, pytest (89 tests)
+**Frontend:** React 19, TypeScript, Vite, Recharts, a PWA manifest, dark mode
+**Ops:** Docker (multi-stage, non-root), docker-compose with PostgreSQL, GitHub Actions (tests on SQLite *and* PostgreSQL, lint, build, Docker smoke test), Render blueprint
 
-## Run
+## Run it
+
 ```bash
 # Backend
 python -m venv .venv
 .venv/Scripts/pip install -e ".[dev]"
 .venv/Scripts/python -m pytest                     # 89 tests
-.venv/Scripts/uvicorn fitflow.api.main:app         # API + docs at http://localhost:8000/docs
+.venv/Scripts/python -m scripts.seed_demo           # optional: demo account with 5 weeks of data
+.venv/Scripts/uvicorn fitflow.api.main:app          # API + interactive docs at http://localhost:8000/docs
 
-# Frontend (in a second terminal)
-cd frontend
-npm install
-npm run dev                                         # http://localhost:5173
+# Frontend (second terminal)
+cd frontend && npm install && npm run dev           # http://localhost:5173
 ```
 
-Optional demo data (5 weeks of history, so charts and insights have something to show).
-It creates the account `demo@fitflow.app` with password `demo1234`:
-```bash
-.venv/Scripts/python -m scripts.seed_demo
-```
+The demo account is `demo@fitflow.app` / `demo1234`.
 
-Or run the full stack (app and PostgreSQL) the way it runs in production:
+Or run the whole stack, including PostgreSQL, the way it runs in production:
 ```bash
 docker compose up --build                           # http://localhost:8000
 ```
 
-The AI coach needs an Anthropic API key in the `ANTHROPIC_API_KEY` environment variable.
-Everything else, including all tests, runs without it.
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design notes.
+The AI coach needs `ANTHROPIC_API_KEY` in the environment. Everything else works without it, including all the tests
+(the agent is tested against a scripted fake client).
