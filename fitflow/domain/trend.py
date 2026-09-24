@@ -1,7 +1,13 @@
 """Weight trend smoothing and adaptive TDEE - the system "learns" the user's metabolism.
 
-Idea: if you ate X kcal/day on average and your weight trend changed by Y kg,
-then your real expenditure was X - (Y * 7700 / days). No formula guessing needed.
+Idea: if you ate X kcal/day on average and your weight changed by Y kg/day,
+then your real expenditure was X - Y * 7700. No formula guessing needed.
+
+Two tools, two jobs:
+  - EWMA trend (weight_trend): smooth line for the progress chart.
+  - Linear regression slope (weight_slope): the rate of change used for the TDEE math.
+    EWMA lags behind a steady trend, which would systematically underestimate the change;
+    a least-squares slope has no lag and still averages out the noise.
 """
 
 from dataclasses import dataclass
@@ -36,6 +42,17 @@ def weight_trend(weigh_ins: list[WeighIn]) -> list[WeighIn]:
     return trend
 
 
+def weight_slope(weigh_ins: list[WeighIn]) -> float:
+    """Least-squares slope in kg/day: the straight line that best fits all readings."""
+    origin = min(w.day for w in weigh_ins)
+    xs = [(w.day - origin).days for w in weigh_ins]
+    ys = [w.weight_kg for w in weigh_ins]
+    x_mean, y_mean = sum(xs) / len(xs), sum(ys) / len(ys)
+    numerator = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys))
+    denominator = sum((x - x_mean) ** 2 for x in xs)
+    return numerator / denominator
+
+
 @dataclass(frozen=True)
 class TdeeUpdate:
     tdee: float                 # the estimate to use from now on
@@ -49,23 +66,23 @@ def adaptive_tdee(
     intake_by_day: dict[date, float],
     workout_by_day: dict[date, float],
 ) -> TdeeUpdate:
-    """Re-estimate baseline TDEE (excluding workouts) from real intake and weight trend."""
-    trend = weight_trend(weigh_ins)
-    if len(trend) < 2:
+    """Re-estimate baseline TDEE (excluding workouts) from real intake and weight change."""
+    points = sorted(weigh_ins, key=lambda w: w.day)
+    if len(points) < 2:
         return TdeeUpdate(previous_tdee, None, "need at least 2 weigh-ins")
 
-    start, end = trend[0], trend[-1]
-    days = (end.day - start.day).days
+    start, end = points[0].day, points[-1].day
+    days = (end - start).days
     if days < MIN_DAYS:
         return TdeeUpdate(previous_tdee, None, f"need {MIN_DAYS} days of data, have {days}")
 
-    logged = [d for d in intake_by_day if start.day <= d < end.day]
+    logged = [d for d in intake_by_day if start <= d < end]
     if len(logged) < days * MIN_LOGGED_SHARE:
         return TdeeUpdate(previous_tdee, None, f"food logged on only {len(logged)}/{days} days")
 
     avg_intake = sum(intake_by_day[d] for d in logged) / len(logged)
     avg_workout = sum(workout_by_day.get(d, 0) for d in logged) / len(logged)
-    stored_per_day = (end.weight_kg - start.weight_kg) * KCAL_PER_KG / days
+    stored_per_day = weight_slope(points) * KCAL_PER_KG
 
     # Energy balance: intake = expenditure + stored  =>  expenditure = intake - stored
     observed = avg_intake - stored_per_day - avg_workout

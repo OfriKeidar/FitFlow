@@ -67,3 +67,20 @@ def test_workout_calories_are_excluded_from_baseline():
     workouts = {d: 300 for d in intake}
     result = adaptive_tdee(2300, weigh_ins, intake, workouts)
     assert result.observed == pytest.approx(2300, abs=1)
+
+
+def test_slope_is_exact_on_a_straight_line():
+    from fitflow.domain.trend import weight_slope
+    readings = [WeighIn(day(n), 80 - 0.1 * n) for n in range(0, 22, 7)]
+    assert weight_slope(readings) == pytest.approx(-0.1)
+
+
+def test_exact_with_few_weekly_weigh_ins():
+    """Regression: EWMA-based change lagged here and underestimated TDEE by ~150 kcal."""
+    weigh_ins, intake = simulate(true_tdee=2550, intake=2000, days=21, every=7)
+    assert adaptive_tdee(2550, weigh_ins, intake, {}).observed == pytest.approx(2550, abs=1)
+
+
+def test_noisy_daily_weigh_ins_still_converge():
+    weigh_ins, intake = simulate(true_tdee=2600, intake=2100, days=28, every=1, noise=1.0)
+    assert adaptive_tdee(2600, weigh_ins, intake, {}).observed == pytest.approx(2600, abs=200)

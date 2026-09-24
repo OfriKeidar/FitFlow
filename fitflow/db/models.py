@@ -1,0 +1,109 @@
+"""Database tables (SQLAlchemy 2.0 ORM)."""
+
+from datetime import date, datetime
+
+from sqlalchemy import ForeignKey, String, UniqueConstraint, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sex: Mapped[str] = mapped_column(String(10))
+    age: Mapped[int]
+    height_cm: Mapped[float]
+    start_weight_kg: Mapped[float]
+    activity: Mapped[str] = mapped_column(String(20))
+    goal: Mapped[str] = mapped_column(String(20))
+    weekly_rate_kg: Mapped[float] = mapped_column(default=0.0)
+    weigh_in_frequency: Mapped[str] = mapped_column(String(10), default="weekly")
+    weekly_workout_goal: Mapped[int] = mapped_column(default=3)
+
+    # The current TDEE estimate. Starts from the formula, then learned from data.
+    tdee: Mapped[float]
+    tdee_updated_on: Mapped[date]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    pantry: Mapped[list["PantryItem"]] = relationship(cascade="all, delete-orphan")
+    disliked: Mapped[list["DislikedFood"]] = relationship(cascade="all, delete-orphan")
+
+
+class Food(Base):
+    __tablename__ = "foods"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    serving: Mapped[str] = mapped_column(String(50))
+    kcal: Mapped[float]
+    protein_g: Mapped[float]
+    carbs_g: Mapped[float]
+    fat_g: Mapped[float]
+    category: Mapped[str] = mapped_column(String(20))
+    meals: Mapped[str] = mapped_column(String(50))  # comma separated, e.g. "LUNCH,DINNER"
+
+
+class FoodLogEntry(Base):
+    """One thing the user ate.
+
+    Nutrition values are COPIED from the food at logging time (a snapshot), so fixing a
+    food's values later doesn't silently rewrite the user's history.
+    """
+    __tablename__ = "food_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    day: Mapped[date] = mapped_column(index=True)
+    food_id: Mapped[int | None] = mapped_column(ForeignKey("foods.id"))
+    description: Mapped[str] = mapped_column(String(200))
+    servings: Mapped[float]
+    kcal: Mapped[float]
+    protein_g: Mapped[float]
+    carbs_g: Mapped[float]
+    fat_g: Mapped[float]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class WorkoutEntry(Base):
+    __tablename__ = "workouts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    day: Mapped[date] = mapped_column(index=True)
+    activity: Mapped[str] = mapped_column(String(50))
+    category: Mapped[str] = mapped_column(String(20))
+    minutes: Mapped[float]
+    kcal: Mapped[float]
+
+
+class WeighInEntry(Base):
+    __tablename__ = "weigh_ins"
+    __table_args__ = (UniqueConstraint("user_id", "day"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    day: Mapped[date]
+    weight_kg: Mapped[float]
+
+
+class PantryItem(Base):
+    __tablename__ = "pantry"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    food_id: Mapped[int] = mapped_column(ForeignKey("foods.id"), primary_key=True)
+    max_servings: Mapped[int]
+
+    food: Mapped[Food] = relationship(lazy="joined")
+
+
+class DislikedFood(Base):
+    __tablename__ = "disliked_foods"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    food_id: Mapped[int] = mapped_column(ForeignKey("foods.id"), primary_key=True)
+
+    food: Mapped[Food] = relationship(lazy="joined")

@@ -5,10 +5,13 @@ description = "Adaptive nutrition & training coach: deterministic algorithms at 
 requires-python = ">=3.11"
 dependencies = [
     "pulp>=2.8",
+    "fastapi>=0.115",
+    "sqlalchemy>=2.0",
+    "uvicorn>=0.30",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "httpx>=0.27"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -16,4 +19,5 @@ pythonpath = ["."]
 filterwarnings = [
     # PuLP 3.x warns about its bundled CBC solver; no pip-installable replacement on Windows yet.
     "ignore:PULP_CBC_CMD is deprecated:DeprecationWarning",
+    "ignore:Using `httpx` with `starlette.testclient`",
 ]
