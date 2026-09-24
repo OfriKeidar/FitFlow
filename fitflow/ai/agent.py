@@ -5,33 +5,32 @@ How one chat turn works (the "agentic loop"):
     user message
         |
         v
-    send conversation + tool definitions to Claude  <-----------------+
+    send conversation + tool definitions to the model  <--------------+
         |                                                              |
         v                                                              |
-    Claude answers. Did it ask to use tools? (stop_reason == "tool_use")
+    The model answers. Did it ask to use tools?                        |
         |-- yes: run each tool with OUR code, send the results back ---+
         |-- no:  that's the final reply -> save the turn, return it
 
-We write this loop by hand (instead of using the SDK's tool runner) so every step is visible:
+We write this loop by hand (instead of an SDK's tool runner) so every step is visible:
 persisting the conversation, turning tool errors into feedback the model can fix, a hard cap on
 rounds, and rolling back the whole turn if something fails.
+
+The loop doesn't know which model it talks to - see providers.py (Claude, Gemini, ...).
 """
 
 import json
 from dataclasses import dataclass
 from datetime import date
 
-import anthropic
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fitflow.ai.prompts import SYSTEM_PROMPT
+from fitflow.ai.providers import LLMProvider, ToolResult
 from fitflow.ai.tools import TOOLS, ToolExecutor
 from fitflow.db import models as db
 
-MODEL = "claude-opus-5"
-MAX_TOKENS = 16000
-EFFORT = "medium"  # chat + simple tool calls don't need deep reasoning; "high" is the API default
 MAX_TOOL_ROUNDS = 8  # safety net against a model stuck calling tools forever
 
 # User-facing text is Hebrew (the app's language); code and comments stay in English.
@@ -46,87 +45,81 @@ class AgentReply:
 
 
 class CoachAgent:
-    def __init__(self, client: anthropic.Anthropic):
-        # The client is passed in (dependency injection) so tests can use a fake one.
-        self.client = client
+    def __init__(self, llm: LLMProvider):
+        # The provider is passed in (dependency injection): Claude, Gemini, or a fake in tests.
+        # One agent serves all users at once, so per-user data is passed as arguments, never stored on self.
+        self.llm = llm
 
     def chat(self, session: Session, user: db.User, message: str, today: date, hour: int) -> AgentReply:
-        history = load_history(session, user, today)
+        history = load_history(session, user, today, provider=self.llm.name)
         new_messages: list[dict] = [{"role": "user", "content": message}]
         executor = ToolExecutor(session, user, today, hour)
 
         for _ in range(MAX_TOOL_ROUNDS):
-            response = self._call_model(history + new_messages, user.name)
+            turn = self.llm.complete(SYSTEM_PROMPT, user_context(user), history + new_messages, TOOLS)
 
-            if response.stop_reason == "refusal":
+            if turn.refused:
                 # Don't save a refused turn: replaying it would only trigger the refusal again.
                 session.rollback()
                 return AgentReply(REFUSAL_REPLY, [])
 
-            # Store the assistant message exactly as returned (text, tool_use, thinking blocks...).
-            # The API needs these blocks replayed unchanged on the next request.
-            new_messages.append({"role": "assistant", "content": [to_dict(b) for b in response.content]})
+            new_messages.append(turn.message)
+            if not turn.tool_calls:
+                break  # a final answer
 
-            if response.stop_reason != "tool_use":
-                break  # "end_turn" (normal) or "max_tokens" (cut off - we still show what we have)
-
-            # Run every tool the model asked for, and send ALL results back in ONE user message.
+            # Run every tool the model asked for, and send ALL the results back together.
             results = []
-            for block in response.content:
-                if block.type == "tool_use":
-                    output, is_error = executor.run(block.name, block.input)
-                    results.append({"type": "tool_result", "tool_use_id": block.id, "content": output, "is_error": is_error})
-            new_messages.append({"role": "user", "content": results})
+            for call in turn.tool_calls:
+                if call.input is None:
+                    results.append(ToolResult(call.id, "The arguments were not valid JSON. Try again.", True))
+                else:
+                    output, is_error = executor.run(call.name, call.input)
+                    results.append(ToolResult(call.id, output, is_error))
+            new_messages.extend(self.llm.tool_results(results))
         else:
             session.rollback()
             return AgentReply(TOO_MANY_ROUNDS_REPLY, [])
 
-        save_messages(session, user, today, new_messages)
+        save_messages(session, user, today, self.llm.name, new_messages)
         session.commit()  # the turn and its pending actions are saved together, or not at all
-        return AgentReply(final_text(response), executor.proposed)
-
-    def _call_model(self, messages: list[dict], user_name: str):
-        # Note: one CoachAgent serves all users at once, so per-user data is passed in as
-        # arguments - never stored on `self`, where concurrent requests would overwrite it.
-        return self.client.beta.messages.create(
-            model=MODEL,
-            max_tokens=MAX_TOKENS,
-            # The static prompt first (identical for everyone), then this user's name.
-            system=[{"type": "text", "text": SYSTEM_PROMPT}, {"type": "text", "text": f"The user's name is {user_name}."}],
-            tools=TOOLS,
-            messages=messages,
-            output_config={"effort": EFFORT},
-            # Thinking is adaptive by default on this model: it decides when it needs to think.
-            cache_control={"type": "ephemeral"},  # cache the growing conversation prefix -> cheaper turns
-            # If the model's safety classifier declines, retry on Anthropic's recommended fallback model.
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-        )
+        return AgentReply(turn.text, executor.proposed)
 
 
-# --- helpers ---
-
-def to_dict(block) -> dict:
-    """SDK content block -> plain JSON-able dict (what we store and send back)."""
-    return block.model_dump(mode="json", by_alias=True, exclude_none=True)
-
-
-def final_text(response) -> str:
-    return "\n".join(b.text for b in response.content if b.type == "text").strip()
+def user_context(user: db.User) -> str:
+    """Per-user facts for the model. In Hebrew, verbs and adjectives change with gender ("תאשר" /
+    "תאשרי"), and guessing it from the name goes wrong - so we tell the model explicitly."""
+    form = "feminine" if user.sex == "female" else "masculine"
+    return f"The user's name is {user.name}. Address them in {form} Hebrew forms."
 
 
-def load_history(session: Session, user: db.User, day: date) -> list[dict]:
-    """Today's conversation. A new day starts a fresh conversation, which keeps context small."""
-    rows = session.scalars(
-        select(db.ChatMessage)
-        .where(db.ChatMessage.user_id == user.id, db.ChatMessage.day == day)
-        .order_by(db.ChatMessage.id)
-    )
-    return [{"role": r.role, "content": json.loads(r.content)} for r in rows]
+# --- conversation storage ---
+
+def load_history(session: Session, user: db.User, day: date, provider: str | None = None) -> list[dict]:
+    """Today's conversation (a new day starts fresh, which keeps the context small).
+
+    With `provider`, only that provider's messages: tool calls are stored in each API's own format,
+    so a conversation can only be continued by the provider that wrote it.
+    """
+    query = select(db.ChatMessage).where(db.ChatMessage.user_id == user.id, db.ChatMessage.day == day)
+    if provider is not None:
+        query = query.where(db.ChatMessage.provider == provider)
+    return [json.loads(row.content) for row in session.scalars(query.order_by(db.ChatMessage.id))]
 
 
-def save_messages(session: Session, user: db.User, day: date, messages: list[dict]) -> None:
+def save_messages(session: Session, user: db.User, day: date, provider: str, messages: list[dict]) -> None:
     session.add_all(
-        db.ChatMessage(user_id=user.id, day=day, role=m["role"], content=json.dumps(m["content"], ensure_ascii=False))
+        db.ChatMessage(user_id=user.id, day=day, provider=provider, role=m["role"],
+                       content=json.dumps(m, ensure_ascii=False))
         for m in messages
     )
+
+
+def visible_text(message: dict) -> str:
+    """The part of a stored message a person should see (no tool calls, no tool results)."""
+    if message.get("role") not in ("user", "assistant"):
+        return ""  # e.g. OpenAI-style "tool" messages
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    # Anthropic-style list of blocks; a user message made of tool_result blocks has no text.
+    return "\n".join(b.get("text", "") for b in content or [] if b.get("type") == "text")

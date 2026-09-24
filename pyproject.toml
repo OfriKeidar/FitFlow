@@ -16,6 +16,7 @@ dependencies = [
     "pyjwt>=2.8",
     "email-validator>=2",
     "python-dotenv>=1",
+    "openai>=1.50",  # for Gemini and other OpenAI-compatible APIs
 ]
 
 [project.optional-dependencies]

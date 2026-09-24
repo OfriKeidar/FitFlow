@@ -1,14 +1,16 @@
+import logging
 from datetime import datetime
 
-import anthropic
 from fastapi import APIRouter, HTTPException
 
-from fitflow.ai.agent import load_history
+from fitflow.ai.agent import load_history, visible_text
+from fitflow.ai.providers import LLMError, LLMRateLimited
 from fitflow.api.deps import DB, Agent, CurrentUser, Today
 from fitflow.api.schemas import ChatHistoryItem, ChatIn, ChatOut, PendingActionOut
 from fitflow.services import actions
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+log = logging.getLogger("fitflow.chat")
 
 
 @router.post("", response_model=ChatOut)
@@ -16,11 +18,14 @@ def send_message(body: ChatIn, user: CurrentUser, db: DB, today: Today, agent: A
     hour = datetime.now().hour if body.hour is None else body.hour
     try:
         reply = agent.chat(db, user, body.message, today, hour)
-    except anthropic.RateLimitError:
+    except LLMRateLimited as e:
+        log.warning("LLM rate limited: %s", e)
         db.rollback()
         raise HTTPException(429, "The coach is busy right now, try again in a minute")
-    except (anthropic.APIStatusError, anthropic.APIConnectionError):
-        # The SDK already retried; this is a real outage or a config problem (e.g. missing API key).
+    except LLMError:
+        # The SDK already retried; this is a real outage or a config problem (e.g. an invalid key).
+        # The user gets a generic message, but the details must be in the server log for debugging.
+        log.exception("LLM request failed")
         db.rollback()
         raise HTTPException(503, "The coach is unavailable right now")
     return ChatOut(reply=reply.text, actions=[PendingActionOut.model_validate(a) for a in reply.actions])
@@ -30,12 +35,8 @@ def send_message(body: ChatIn, user: CurrentUser, db: DB, today: Today, agent: A
 def history(user: CurrentUser, db: DB, today: Today):
     """Today's conversation as the user sees it: only visible text, no tool calls or results."""
     items = []
-    for message in load_history(db, user, today):
-        content = message["content"]
-        if isinstance(content, str):
-            text = content
-        else:
-            text = "\n".join(b["text"] for b in content if b.get("type") == "text")
+    for message in load_history(db, user, today):  # all providers - it's just text to show
+        text = visible_text(message)
         if text.strip():
             items.append(ChatHistoryItem(role=message["role"], text=text))
     return items

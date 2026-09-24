@@ -93,6 +93,33 @@ user message
 The loop is written by hand in `agent.py` (not the SDK's tool runner) so every step is visible
 and under our control.
 
+### Provider-agnostic (`providers.py`)
+The loop talks to a small `LLMProvider` interface (`complete()` and `tool_results()`), with one adapter per API.
+This is the Adapter / Strategy pattern:
+- **`AnthropicProvider`** is Claude via the Anthropic SDK.
+- **`OpenAICompatibleProvider`** covers any OpenAI-style API. The default is **Google Gemini's free tier**, and the
+  same adapter works for Groq, OpenRouter or a local Ollama: only the URL and the model name change.
+- The provider is chosen by configuration (`GEMINI_API_KEY` / `ANTHROPIC_API_KEY` / `LLM_PROVIDER` in `.env`).
+  No code changes.
+- Messages are stored in each provider's own format, tagged with the provider, because tool calls look
+  different in each API.
+
+### Running on a free tier: lessons from the live API
+- **Model fallback.** Free models are often "503 overloaded", and the quota is **per model** (for example,
+  5 requests per minute). So the adapter tries a list of models in order, and only reports "busy" if all of them fail.
+- **Circuit breaker.** A model that hit its quota is skipped for 60 seconds, and an overloaded one for 20.
+  Without this, every request first wasted seconds on the same failing model.
+- **Fewer round trips.** `search_foods` takes all the foods of a message in one call, so one message
+  is about 3 requests instead of 5 or 6. That's faster, and it uses less quota.
+- **Replay the model's messages unchanged, including fields you don't know.** Gemini rejected the 2nd request
+  with "missing thought_signature". The adapter had rebuilt each tool call from the fields it knew and dropped
+  `extra_content.google.thought_signature`. Now tool calls are stored exactly as received. This is the same rule as
+  Claude's thinking blocks, and it's covered by a regression test.
+- **Observability.** At first the chat returned 503 with nothing in the server log, so it couldn't be debugged.
+  Now every model call logs its model and duration, fallbacks are warnings, and LLM failures log a full traceback.
+- **Hebrew grammatical gender.** Gemini guessed the user's gender from the name ("דנה" -> feminine verbs),
+  but the profile said male. The per-user context now says explicitly which forms to use.
+
 ### Design decisions
 - **Human in the loop.** There is no tool that writes to the log. `propose_*` tools create a
   `PendingAction` with a preview, and only the user's Confirm click writes data. The model
@@ -108,10 +135,11 @@ and under our control.
 - **Conversation storage.** Messages are stored verbatim (all content blocks). The API requires
   earlier blocks to be replayed unchanged. There is one conversation per day, which keeps the
   context small.
-- **Model settings.** `claude-opus-5` with `effort: medium` (chat doesn't need deep reasoning),
-  adaptive thinking, prompt caching of the conversation prefix, and server-side refusal fallbacks.
-- **Testability.** The Anthropic client is injected, so tests use a scripted fake. The tests cover
-  our loop, gate, persistence and error handling, with no API key and no cost.
+- **Model settings.** Claude: `claude-opus-5` with `effort: medium`, prompt caching and server-side refusal fallbacks.
+  Gemini: `reasoning_effort: low`, since chat and simple tool calls don't need deep thinking, and it's faster and cheaper on quota.
+- **Testability.** The provider's client is injected, so tests use scripted fakes for both APIs, built from
+  the SDKs' real response types. They cover the loop, the gate, persistence, fallback, the circuit breaker
+  and error handling, with no API key and no cost.
 
 ## Frontend (`frontend/`)
 React and TypeScript with Vite. A mobile-first, right-to-left (Hebrew) layout with dark mode, installable as a PWA.
@@ -195,6 +223,6 @@ src/pages/      Onboarding, Today, Chat, Meal, Workouts, Progress
 `POST /chat` · `GET /chat/history` · `GET /chat/actions` · `POST /chat/actions/{id}/confirm` · `/reject`
 
 ## Tests
-`pytest` runs 89 tests. They include a simulated user with a known TDEE and noisy weigh-ins,
+`pytest` runs 105 tests. They include a simulated user with a known TDEE and noisy weigh-ins,
 checking that the algorithm recovers the TDEE for daily, weekly and monthly weigh-ins, plus
 end-to-end API tests and agent tests with a fake LLM.

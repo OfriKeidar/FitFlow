@@ -4,12 +4,12 @@ from datetime import date
 from functools import lru_cache
 from typing import Annotated
 
-import anthropic
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from fitflow.ai.agent import CoachAgent
+from fitflow.ai.providers import LLMNotConfigured, provider_from_env
 from fitflow.db.models import User
 from fitflow.db.session import get_db
 from fitflow.services import auth
@@ -42,17 +42,15 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 @lru_cache
 def _shared_agent() -> CoachAgent:
-    """One agent for the whole app. anthropic.Anthropic() reads ANTHROPIC_API_KEY from the environment."""
-    return CoachAgent(anthropic.Anthropic())
+    """One agent for the whole app, using the provider configured in the environment (see providers.py)."""
+    return CoachAgent(provider_from_env())
 
 
 def get_agent() -> CoachAgent:
-    agent = _shared_agent()
-    client = agent.client
-    # Without credentials the SDK would fail deep inside the request; fail early with a clear message.
-    if not client.api_key and not client.auth_token and client.credentials is None:  # empty counts as missing
-        raise HTTPException(503, "The coach is not configured: set ANTHROPIC_API_KEY on the server")
-    return agent
+    try:
+        return _shared_agent()  # a failure isn't cached, so setting a key later works without a restart
+    except LLMNotConfigured as e:
+        raise HTTPException(503, f"The coach is not configured: {e}")
 
 
 Agent = Annotated[CoachAgent, Depends(get_agent)]

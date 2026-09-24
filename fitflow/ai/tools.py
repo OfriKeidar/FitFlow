@@ -6,6 +6,8 @@ Two kinds of tools:
     that the user must confirm in the app. The model cannot bypass this - there is no tool
     that writes directly.
 
+Tool definitions use Anthropic's schema shape; providers.py converts them for other APIs.
+
 Every number the model reports comes from these tools (our deterministic code), not from the model.
 The only exception is propose_custom_food, where the model estimates a food we don't have -
 and that is explicitly labelled as an estimate for the user to confirm.
@@ -29,14 +31,20 @@ TOOLS = [
     {
         "name": "search_foods",
         "description": (
-            "Search the food database by name (Hebrew). Returns matching foods with their id, "
-            "serving size and nutrition per ONE serving. Search with the singular base form "
-            "(e.g. 'ביצה' not 'ביצים'); if nothing matches, try a shorter word or a synonym."
+            "Search the food database by name (Hebrew). Pass ALL the foods from the user's message in one "
+            "call. Returns, for each query, matching foods with their id, serving size and nutrition per ONE "
+            "serving. Search with the singular base form (e.g. 'ביצה' not 'ביצים'); if nothing matches, "
+            "try a shorter word or a synonym."
         ),
         "input_schema": {
             "type": "object",
-            "properties": {"query": {"type": "string", "description": "Food name or part of it"}},
-            "required": ["query"],
+            "properties": {
+                "queries": {
+                    "type": "array", "items": {"type": "string"},
+                    "description": "One food name (or part of it) per item",
+                },
+            },
+            "required": ["queries"],
         },
     },
     {
@@ -167,7 +175,12 @@ class ToolExecutor:
 
     # --- read tools ---
 
-    def _tool_search_foods(self, query: str) -> list[dict]:
+    def _tool_search_foods(self, queries: list[str]) -> dict:
+        # One call for all the foods in a message: each model round trip is slow and counts
+        # against the provider's rate limit.
+        return {query: self._search(query) for query in queries[:15]}
+
+    def _search(self, query: str) -> list[dict]:
         words = [w for w in query.split() if w]
         foods = self.session.scalars(
             select(db.Food).where(or_(*(db.Food.name.contains(w) for w in words))).limit(10)

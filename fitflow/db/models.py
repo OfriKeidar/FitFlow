@@ -119,16 +119,17 @@ class DislikedFood(Base):
 class ChatMessage(Base):
     """One message in the coach conversation, stored exactly as sent to / received from the LLM.
 
-    `content` is JSON: a plain string for user text, or a list of content blocks
-    (text, tool_use, tool_result, thinking...). We must replay these blocks unchanged
-    on the next request, so we store them verbatim instead of only the visible text.
+    `content` is the whole message as JSON, in the provider's own format (tool calls and results
+    look different in each API). We must replay messages unchanged on the next request, so we store
+    them verbatim instead of only the visible text.
     """
     __tablename__ = "chat_messages"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     day: Mapped[date] = mapped_column(index=True)  # one conversation per day
-    role: Mapped[str] = mapped_column(String(10))  # "user" | "assistant"
+    provider: Mapped[str] = mapped_column(String(30))  # which LLM API wrote it - see ai/providers.py
+    role: Mapped[str] = mapped_column(String(10))  # "user" | "assistant" | "tool"
     content: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 

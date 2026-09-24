@@ -21,7 +21,8 @@ services:
     environment:
       DATABASE_URL: postgresql://fitflow:fitflow@db:5432/fitflow
       JWT_SECRET: ${JWT_SECRET:-local-compose-secret-change-me}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}  # optional: enables the AI coach
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}        # enables the AI coach (free key from Google AI Studio)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}  # or use Claude instead
     depends_on:
       db:
         condition: service_healthy  # wait until Postgres accepts connections

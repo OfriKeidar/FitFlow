@@ -13,8 +13,8 @@ services:
           property: connectionString
       - key: JWT_SECRET
         generateValue: true  # Render generates a long random secret
-      - key: ANTHROPIC_API_KEY
-        sync: false  # set by hand in the dashboard; never committed to git
+      - key: GEMINI_API_KEY
+        sync: false  # set by hand in the dashboard (free key from Google AI Studio); never committed to git
 
 databases:
   - name: fitflow-db

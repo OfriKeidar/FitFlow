@@ -13,6 +13,7 @@ import pytest
 from anthropic.types.beta import BetaMessage
 
 from fitflow.ai.agent import MAX_TOOL_ROUNDS, REFUSAL_REPLY, TOO_MANY_ROUNDS_REPLY, CoachAgent
+from fitflow.ai.providers import AnthropicProvider
 from fitflow.api.deps import get_agent
 from fitflow.api.main import app
 from tests.conftest import food_id
@@ -60,7 +61,7 @@ class FakeLLM:
 def llm(client):
     """Install a FakeLLM; each test sets its script with llm.script = [...]."""
     fake = FakeLLM()
-    app.dependency_overrides[get_agent] = lambda: CoachAgent(fake)
+    app.dependency_overrides[get_agent] = lambda: CoachAgent(AnthropicProvider(fake))
     return fake
 
 
@@ -79,7 +80,7 @@ def last_tool_results(request: dict) -> list[dict]:
 def test_food_is_proposed_not_logged_until_confirmed(client, user, llm):
     egg = food_id(client, "ביצה")
     llm.script = [
-        reply(tool_call("search_foods", {"query": "ביצה"})),
+        reply(tool_call("search_foods", {"queries": ["ביצה"]})),
         reply(tool_call("propose_food_log", {"items": [{"food_id": egg, "servings": 2}]}, "call_2")),
         reply(text("רשמתי 2 ביצים, 144 קק\"ל. מחכה לאישור שלך")),
     ]
@@ -95,12 +96,12 @@ def test_food_is_proposed_not_logged_until_confirmed(client, user, llm):
 
 
 def test_tool_results_are_sent_back_to_the_model(client, user, llm):
-    llm.script = [reply(tool_call("search_foods", {"query": "ביצה"})), reply(text("ok"))]
+    llm.script = [reply(tool_call("search_foods", {"queries": ["ביצה"]})), reply(text("ok"))]
     chat(client, user, "כמה חלבון יש בביצה?")
 
     [result] = last_tool_results(llm.requests[1])
     assert result["type"] == "tool_result" and result["tool_use_id"] == "call_1"
-    assert json.loads(result["content"])[0]["name"] == "ביצה"
+    assert json.loads(result["content"])["ביצה"][0]["name"] == "ביצה"
 
 
 def test_confirming_twice_does_not_log_twice(client, user, llm):
@@ -150,9 +151,16 @@ def test_invalid_tool_input_is_returned_as_error_so_the_model_can_fix_it(client,
     assert result["actions"] == []
 
 
+def test_search_several_foods_in_one_call(client, user, llm):
+    llm.script = [reply(tool_call("search_foods", {"queries": ["ביצה", "לחם מלא"]})), reply(text("ok"))]
+    chat(client, user, "ביצה ולחם")
+    results = json.loads(last_tool_results(llm.requests[1])[0]["content"])
+    assert set(results) == {"ביצה", "לחם מלא"} and results["לחם מלא"][0]["name"] == "לחם מלא"
+
+
 def test_parallel_tool_calls_get_all_results_in_one_message(client, user, llm):
     llm.script = [
-        reply(tool_call("search_foods", {"query": "ביצה"}, "a"), tool_call("search_foods", {"query": "לחם"}, "b")),
+        reply(tool_call("search_foods", {"queries": ["ביצה"]}, "a"), tool_call("search_foods", {"queries": ["לחם"]}, "b")),
         reply(text("ok")),
     ]
     chat(client, user, "ביצה ולחם")
@@ -198,12 +206,12 @@ def test_api_outage_returns_503(client, user, llm):
 
 def test_missing_api_key_returns_503(client, user, monkeypatch):
     from fitflow.api.deps import _shared_agent
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    for name in ("LLM_PROVIDER", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
     _shared_agent.cache_clear()
     r = client.post("/chat", headers=user, json={"message": "hi"})
     _shared_agent.cache_clear()
-    assert r.status_code == 503 and "ANTHROPIC_API_KEY" in r.json()["detail"]
+    assert r.status_code == 503 and "not configured" in r.json()["detail"]
 
 
 def test_request_uses_expected_model_settings(client, user, llm):
@@ -211,6 +219,6 @@ def test_request_uses_expected_model_settings(client, user, llm):
     chat(client, user, "hi")
     request = llm.requests[0]
     assert request["model"] == "claude-opus-5"
-    assert request["system"][1]["text"] == "The user's name is Dana."
+    assert request["system"][1]["text"] == "The user's name is Dana. Address them in masculine Hebrew forms."
     assert request["fallbacks"] == "default"
     assert {t["name"] for t in request["tools"]} >= {"search_foods", "propose_food_log", "propose_workout"}

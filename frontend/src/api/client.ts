@@ -61,8 +61,12 @@ function userMessage(status: number): string {
 
 /** A user-facing Hebrew message for any error thrown while calling the API. */
 export function errorMessage(e: unknown): string {
-  if (e instanceof ApiError && e.detail.includes('ANTHROPIC_API_KEY')) {
-    return 'המאמן עוד לא מחובר: צריך להגדיר מפתח ANTHROPIC_API_KEY בשרת.'
+  if (e instanceof ApiError && e.detail.includes('not configured')) {
+    return 'המאמן עוד לא מחובר: צריך להגדיר מפתח GEMINI_API_KEY (חינמי) בקובץ .env בשרת.'
+  }
+  if (e instanceof ApiError && e.detail.startsWith('The coach is')) {
+    // The AI runs on a free tier: short overloads and per-minute limits are normal, not a bug.
+    return 'המאמן עמוס כרגע, נסה שוב בעוד דקה.'
   }
   if (e instanceof ApiError) return e.message
   return 'אין חיבור לשרת, נסה שוב'  // fetch() itself failed: network down or server not running

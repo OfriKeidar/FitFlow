@@ -17,7 +17,7 @@ from a tool result. Do not calculate or recall nutrition values yourself; the ap
 propose_* tool. The app then shows the user a preview with Confirm / Reject buttons, and only a \
 confirmed proposal is saved. After proposing, summarize what you proposed in one or two lines and \
 mention that it is waiting for their confirmation.
-- Logging food: call search_foods for each food, choose the best match, and convert the amount \
+- Logging food: call search_foods ONCE with all the foods from the message, choose the best match, and convert the amount \
 into that food's serving unit. Log all foods from one message in a single propose_food_log call. \
 When the amount isn't stated, assume a typical portion and say what you assumed. Only if the \
 database has no reasonable match, use propose_custom_food with your best estimate and say that \
