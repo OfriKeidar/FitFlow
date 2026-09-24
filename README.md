@@ -16,15 +16,30 @@ from what you have at home.
 | Insights | Weekend vs weekday intake, protein on training days, workout streaks |
 | Chat coach | Claude tool-use agent; proposes entries, the user confirms before anything is saved |
 
+## Stack
+Python, FastAPI, SQLAlchemy, PuLP, the Anthropic SDK, and pytest for the backend. React, TypeScript, Vite and
+Recharts for the frontend: a mobile-first, right-to-left Hebrew web app with dark mode, installable as a PWA.
+
 ## Run
 ```bash
+# Backend
 python -m venv .venv
 .venv/Scripts/pip install -e ".[dev]"
-.venv/Scripts/python -m pytest                          # tests
-.venv/Scripts/uvicorn fitflow.api.main:app --reload     # API docs at http://localhost:8000/docs
-```
-The chat endpoint needs an Anthropic API key in the `ANTHROPIC_API_KEY` environment variable.
-Everything else, including all tests, runs without it.
+.venv/Scripts/python -m pytest                     # 70 tests
+.venv/Scripts/uvicorn fitflow.api.main:app         # API + docs at http://localhost:8000/docs
 
+# Frontend (in a second terminal)
+cd frontend
+npm install
+npm run dev                                         # http://localhost:5173
+```
+
+Optional demo data (5 weeks of history, so charts and insights have something to show):
+```bash
+.venv/Scripts/python -m scripts.seed_demo
+```
+
+The AI coach needs an Anthropic API key in the `ANTHROPIC_API_KEY` environment variable.
+Everything else, including all tests, runs without it.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design notes.

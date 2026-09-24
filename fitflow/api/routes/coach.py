@@ -15,11 +15,16 @@ router = APIRouter(tags=["coach"])
 
 @router.get("/today", response_model=DailyStatusOut)
 def today_status(user: CurrentUser, db: DB, today: Today, day: date | None = None):
-    """The dashboard. Also re-learns the TDEE if a week has passed since the last update."""
-    update = coach.update_targets_if_due(db, user, today)
+    """The dashboard. Also re-learns the TDEE if a week has passed since the last update.
+
+    The update runs lazily on the first request of the day, but the response doesn't depend on
+    which request ran it: calling this twice returns the same data (idempotent GET).
+    """
+    coach.update_targets_if_due(db, user, today)
     status = tracking.daily_status(db, user, day or today)
+    change = coach.todays_target_change(user, today)
     return DailyStatusOut.model_validate(status).model_copy(
-        update={"target_update": TargetUpdateOut(**asdict(update)) if update else None}
+        update={"target_update": TargetUpdateOut(**asdict(change)) if change else None}
     )
 
 
@@ -30,11 +35,14 @@ def meal_suggestion(
 ):
     hour = datetime.now().hour if hour is None else hour
     remaining = tracking.daily_status(db, user, today).remaining
-    suggestion = coach.suggest_meal_now(db, user, today, hour)
+    plan = coach.suggest_meal_now(db, user, today, hour)
+    ids = {item.food.name: item.food_id for item in user.pantry}  # domain foods carry no DB id
     return MealSuggestionOut(
-        items=[SuggestedItem(food=p.food.name, serving=p.food.serving, servings=n) for p, n in suggestion.items],
-        totals=MacrosOut.model_validate(suggestion.totals),
-        remaining_before=MacrosOut.model_validate(remaining),
+        items=[SuggestedItem(food_id=ids[p.food.name], food=p.food.name, serving=p.food.serving, servings=n)
+               for p, n in plan.suggestion.items],
+        totals=MacrosOut.model_validate(plan.suggestion.totals),
+        meal_target=MacrosOut.model_validate(plan.target),
+        remaining_today=MacrosOut.model_validate(remaining),
     )
 
 

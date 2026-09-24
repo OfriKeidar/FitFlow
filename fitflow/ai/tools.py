@@ -118,8 +118,9 @@ TOOLS = [
     {
         "name": "suggest_meal",
         "description": (
-            "Suggest a meal from the foods the user has at home, optimized to fit what remains of "
-            "today's targets. Use when the user asks what to eat."
+            "Suggest a meal from the foods the user has at home. It aims for this meal's share of "
+            "what remains today (based on the time of day), found by an optimization algorithm. "
+            "Use when the user asks what to eat."
         ),
         "input_schema": {"type": "object", "properties": {}},
     },
@@ -190,12 +191,14 @@ class ToolExecutor:
         }
 
     def _tool_suggest_meal(self) -> dict:
-        suggestion = coach.suggest_meal_now(self.session, self.user, self.today, self.hour)
+        plan = coach.suggest_meal_now(self.session, self.user, self.today, self.hour)
+        suggestion = plan.suggestion
         if not suggestion.items:
             return {"items": [], "note": "No suggestion: the pantry is empty or nothing is left to eat today."}
         return {
             "items": [{"food": p.food.name, "serving": p.food.serving, "servings": n} for p, n in suggestion.items],
             "totals": _macros(suggestion.totals),
+            "meal_target": _macros(plan.target),
         }
 
     def _tool_get_week_workouts(self) -> dict:

@@ -118,6 +118,14 @@ def get_pending(session: Session, user: db.User, action_id: int) -> db.PendingAc
     ))
 
 
+def list_pending(session: Session, user: db.User) -> list[db.PendingAction]:
+    return list(session.scalars(
+        select(db.PendingAction)
+        .where(db.PendingAction.user_id == user.id, db.PendingAction.status == "pending")
+        .order_by(db.PendingAction.id)
+    ))
+
+
 def confirm(session: Session, user: db.User, action: db.PendingAction) -> None:
     payload = PAYLOADS[action.kind].model_validate_json(action.payload)
 

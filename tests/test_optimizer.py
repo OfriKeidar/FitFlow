@@ -60,3 +60,18 @@ def test_meal_is_inferred_from_hour():
     assert meal_for_hour(13) == Meal.LUNCH
     assert meal_for_hour(20) == Meal.DINNER
     assert meal_for_hour(2) == Meal.DINNER  # late-night snack still "dinner-like"
+
+
+def test_meal_target_splits_the_rest_of_the_day():
+    from fitflow.domain.optimizer import meal_target
+    daily = Macros(2000, 150, 200, 60)
+    lunch = meal_target(Macros(1200, 90, 120, 36), daily, Meal.LUNCH)  # 3 meals left
+    assert lunch.kcal == 400 and lunch.protein_g == 30
+
+
+def test_meal_target_is_capped_to_a_reasonable_plate():
+    from fitflow.domain.optimizer import MAX_MEAL_SHARE, meal_target
+    daily = Macros(2000, 150, 200, 60)
+    dinner = meal_target(daily, daily, Meal.DINNER)  # nothing eaten all day
+    assert dinner.kcal == 2000 * MAX_MEAL_SHARE
+    assert dinner.protein_g == 150 * MAX_MEAL_SHARE  # all macros shrink together

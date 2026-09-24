@@ -44,6 +44,23 @@ def meal_for_hour(hour: int) -> Meal:
     return Meal.DINNER
 
 
+# How many meals are usually still ahead (including this one) at each point in the day.
+MEALS_LEFT = {Meal.BREAKFAST: 4, Meal.LUNCH: 3, Meal.SNACK: 2, Meal.DINNER: 1}
+MAX_MEAL_SHARE = 0.4  # one meal is at most 40% of the whole day's calories
+
+
+def meal_target(remaining: Macros, daily_target: Macros, meal: Meal) -> Macros:
+    """What THIS meal should cover: an even share of what's left today, capped to a sane size.
+
+    Without this, at breakfast the optimizer would try to fit the whole day into one plate.
+    """
+    share = remaining.scale(1 / MEALS_LEFT[meal])
+    cap = daily_target.kcal * MAX_MEAL_SHARE
+    if share.kcal > cap:
+        share = share.scale(cap / share.kcal)  # shrink all macros proportionally
+    return share
+
+
 @dataclass(frozen=True)
 class MealSuggestion:
     items: list[tuple[PantryItem, int]]  # (pantry item, servings)

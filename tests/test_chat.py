@@ -111,6 +111,15 @@ def test_confirming_twice_does_not_log_twice(client, user, llm):
     assert client.post(f"/chat/actions/{action['id']}/confirm", headers=user).status_code == 404
 
 
+def test_pending_actions_can_be_listed_until_resolved(client, user, llm):
+    llm.script = [reply(tool_call("propose_weight", {"weight_kg": 79})), reply(text("ok"))]
+    [action] = chat(client, user, "שקלתי 79")["actions"]
+
+    assert [a["id"] for a in client.get("/chat/actions", headers=user).json()] == [action["id"]]
+    client.post(f"/chat/actions/{action['id']}/reject", headers=user)
+    assert client.get("/chat/actions", headers=user).json() == []
+
+
 def test_rejected_action_is_not_logged(client, user, llm):
     llm.script = [reply(tool_call("propose_custom_food", {
         "description": "פיצה משפחתית", "kcal": 2000, "protein_g": 80, "carbs_g": 250, "fat_g": 70,
@@ -185,6 +194,16 @@ def test_api_outage_returns_503(client, user, llm):
     request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
     llm.script = [anthropic.InternalServerError("boom", response=httpx2.Response(500, request=request), body=None)]
     assert client.post("/chat", headers=user, json={"message": "hi"}).status_code == 503
+
+
+def test_missing_api_key_returns_503(client, user, monkeypatch):
+    from fitflow.api.deps import _shared_agent
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    _shared_agent.cache_clear()
+    r = client.post("/chat", headers=user, json={"message": "hi"})
+    _shared_agent.cache_clear()
+    assert r.status_code == 503 and "ANTHROPIC_API_KEY" in r.json()["detail"]
 
 
 def test_request_uses_expected_model_settings(client, user, llm):

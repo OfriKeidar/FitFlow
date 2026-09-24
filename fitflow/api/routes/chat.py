@@ -41,6 +41,12 @@ def history(user: CurrentUser, db: DB, today: Today):
     return items
 
 
+@router.get("/actions", response_model=list[PendingActionOut])
+def pending_actions(user: CurrentUser, db: DB):
+    """Proposals still waiting for the user, so the app can show them after a page reload."""
+    return actions.list_pending(db, user)
+
+
 @router.post("/actions/{action_id}/confirm", response_model=PendingActionOut)
 def confirm_action(action_id: int, user: CurrentUser, db: DB):
     action = _pending_or_404(db, user, action_id)

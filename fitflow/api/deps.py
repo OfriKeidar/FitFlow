@@ -35,9 +35,18 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
 @lru_cache
-def get_agent() -> CoachAgent:
-    """One shared agent. anthropic.Anthropic() reads ANTHROPIC_API_KEY from the environment."""
+def _shared_agent() -> CoachAgent:
+    """One agent for the whole app. anthropic.Anthropic() reads ANTHROPIC_API_KEY from the environment."""
     return CoachAgent(anthropic.Anthropic())
+
+
+def get_agent() -> CoachAgent:
+    agent = _shared_agent()
+    client = agent.client
+    # Without credentials the SDK would fail deep inside the request; fail early with a clear message.
+    if client.api_key is None and client.auth_token is None and client.credentials is None:
+        raise HTTPException(503, "The coach is not configured: set ANTHROPIC_API_KEY on the server")
+    return agent
 
 
 Agent = Annotated[CoachAgent, Depends(get_agent)]

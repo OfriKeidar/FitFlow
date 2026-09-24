@@ -11,7 +11,7 @@ from fitflow.db import models as db
 from fitflow.domain.energy import daily_targets
 from fitflow.domain.insights import Insight, generate_insights, week_start, weekly_workout_counts
 from fitflow.domain.models import DaySummary, Macros, WeighIn, WorkoutCategory, ZERO_MACROS
-from fitflow.domain.optimizer import MealSuggestion, meal_for_hour, suggest_meal
+from fitflow.domain.optimizer import MealSuggestion, meal_for_hour, meal_target, suggest_meal
 from fitflow.domain.trend import TdeeUpdate, adaptive_tdee, weight_trend
 from fitflow.services.mappers import entry_macros, to_pantry_item, to_weigh_in, to_workout
 from fitflow.services.tracking import daily_status, profile_of, workout_entries
@@ -54,17 +54,43 @@ def update_targets_if_due(session: Session, user: db.User, today: date) -> TdeeU
         workouts[w.day] += w.kcal
 
     update = adaptive_tdee(user.tdee, _weigh_ins(session, user, since=start), intake, workouts)
+    user.tdee_previous = user.tdee if update.observed is not None else None
     user.tdee = update.tdee
     user.tdee_updated_on = today
     session.commit()
     return update
 
 
-def suggest_meal_now(session: Session, user: db.User, day: date, hour: int) -> MealSuggestion:
-    remaining = daily_status(session, user, day).remaining
+@dataclass(frozen=True)
+class TargetChange:
+    previous_tdee: float
+    tdee: float
+
+
+def todays_target_change(user: db.User, today: date) -> TargetChange | None:
+    """The TDEE change made today, if any.
+
+    Derived from stored state (not from whether *this* request ran the update), so every
+    request today gets the same answer - GET /today stays idempotent.
+    """
+    if user.tdee_updated_on == today and user.tdee_previous is not None:
+        return TargetChange(user.tdee_previous, user.tdee)
+    return None
+
+
+@dataclass(frozen=True)
+class MealPlan:
+    target: Macros               # what this meal aims for
+    suggestion: MealSuggestion
+
+
+def suggest_meal_now(session: Session, user: db.User, day: date, hour: int) -> MealPlan:
+    status = daily_status(session, user, day)
+    meal = meal_for_hour(hour)
+    target = meal_target(status.remaining, status.target, meal)
     pantry = [to_pantry_item(p) for p in user.pantry]
     disliked = frozenset(d.food.name for d in user.disliked)
-    return suggest_meal(pantry, remaining, meal_for_hour(hour), disliked)
+    return MealPlan(target, suggest_meal(pantry, target, meal, disliked))
 
 
 def insights(session: Session, user: db.User, today: date) -> list[Insight]:

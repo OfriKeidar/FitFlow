@@ -92,7 +92,8 @@ def protein_on_training_days(days: list[DaySummary]) -> Insight | None:
         return None
     return Insight(
         "protein_training",
-        f"בימי אימון עמדת ביעד החלבון ב-{train_rate:.0%} מהימים, בימי מנוחה ב-{rest_rate:.0%}",
+        # Hebrew maqaf (U+05BE), not "-": an ASCII hyphen before a number breaks right-to-left display.
+        f"בימי אימון עמדת ביעד החלבון ב־{train_rate:.0%} מהימים, בימי מנוחה ב־{rest_rate:.0%}",
         {"training_rate": round(train_rate, 2), "rest_rate": round(rest_rate, 2)},
     )
 

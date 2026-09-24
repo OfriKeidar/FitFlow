@@ -110,6 +110,34 @@ and under our control.
 - **Testability.** The Anthropic client is injected, so tests use a scripted fake. The tests cover
   our loop, gate, persistence and error handling, with no API key and no cost.
 
+## Frontend (`frontend/`)
+React and TypeScript with Vite. A mobile-first, right-to-left (Hebrew) layout with dark mode, installable as a PWA.
+
+```
+src/api/        types.ts mirrors the backend schemas; client.ts has one function per endpoint
+src/hooks/      useApi: load data on mount, with loading, error and reload
+src/components/ Logo (animated loader), ActionCard (the confirm/reject gate), MacroBar, BottomNav
+src/pages/      Onboarding, Today, Chat, Meal, Workouts, Progress
+```
+- **One place for API calls.** Components never build URLs or headers. They call `api.today()` and so on.
+- **Colors are CSS variables**, redefined for dark mode. Components never hardcode colors.
+- **User-facing errors are Hebrew**, mapped from HTTP status codes in `errorMessage()`. The server's
+  technical message is kept on the error object for debugging.
+- **Code splitting.** The progress page, together with the charting library (~370 KB), loads only when
+  it is opened, which roughly halves the initial bundle.
+- **Dev proxy.** Vite forwards `/api/*` to FastAPI, so there's a single origin and no CORS setup.
+
+## Bugs found by using the real UI (good interview stories)
+1. **A GET request with a side effect.** `GET /today` lazily runs the weekly TDEE update. React
+   StrictMode calls effects twice in development: the first request performed the update, and the second
+   reported "no update", so the banner never showed. The fix makes the *response* idempotent: the server
+   stores the previous TDEE, so every request that day returns the same result.
+2. **A whole day on one plate.** With nothing logged yet, the meal optimizer tried to fit the entire day's
+   remaining calories into a single meal (3 servings of everything). Now each meal gets an even share
+   of what's left, based on the meals remaining at that hour, capped at 40% of the daily target.
+3. **Missing API key crashed with a 500.** The SDK raises a `TypeError` when no credentials are
+   configured. Now the dependency checks credentials first and returns a clear 503.
+
 ## Database design decisions
 - **Nutrition snapshots.** A log entry copies the food's values at logging time. Fixing a food in
   the database later doesn't silently rewrite the user's history.
@@ -123,11 +151,11 @@ and under our control.
 `POST /log/food` · `/log/custom-food` · `/log/workout` · `/log/weight` · `DELETE /log/...`
 `GET /today` (dashboard, plus the weekly target update) · `/coach/meal-suggestion?hour=` · `/coach/insights`
 `GET /workouts/week` · `/progress`
-`POST /chat` · `GET /chat/history` · `POST /chat/actions/{id}/confirm` · `/reject`
+`POST /chat` · `GET /chat/history` · `GET /chat/actions` · `POST /chat/actions/{id}/confirm` · `/reject`
 
 Authentication currently uses an `X-User-Id` header. It must be replaced with JWT before deployment.
 
 ## Tests
-`pytest` runs 65 tests. They include a simulated user with a known TDEE and noisy weigh-ins,
+`pytest` runs 70 tests. They include a simulated user with a known TDEE and noisy weigh-ins,
 checking that the algorithm recovers the TDEE for daily, weekly and monthly weigh-ins, plus
 end-to-end API tests and agent tests with a fake LLM.

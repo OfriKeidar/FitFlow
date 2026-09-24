@@ -139,9 +139,8 @@ class WeightOut(ORM):
 # --- coach ---
 
 class TargetUpdateOut(BaseModel):
+    previous_tdee: float
     tdee: float
-    observed: float | None
-    reason: str
 
 
 class DailyStatusOut(ORM):
@@ -157,6 +156,7 @@ class DailyStatusOut(ORM):
 
 
 class SuggestedItem(BaseModel):
+    food_id: int
     food: str
     serving: str
     servings: int
@@ -165,7 +165,8 @@ class SuggestedItem(BaseModel):
 class MealSuggestionOut(BaseModel):
     items: list[SuggestedItem]
     totals: MacrosOut
-    remaining_before: MacrosOut
+    meal_target: MacrosOut       # what this meal aims for
+    remaining_today: MacrosOut   # what's left for the whole day
 
 
 class InsightOut(ORM):

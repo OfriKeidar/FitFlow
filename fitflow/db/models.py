@@ -27,6 +27,9 @@ class User(Base):
     # The current TDEE estimate. Starts from the formula, then learned from data.
     tdee: Mapped[float]
     tdee_updated_on: Mapped[date]
+    # The estimate before the last update that actually changed it (None if the last check
+    # didn't have enough data). Lets every request that day report the same update.
+    tdee_previous: Mapped[float | None] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     pantry: Mapped[list["PantryItem"]] = relationship(cascade="all, delete-orphan")

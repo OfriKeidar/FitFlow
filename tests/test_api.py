@@ -62,6 +62,7 @@ def test_meal_suggestion_uses_pantry(client, user):
     r = client.get("/coach/meal-suggestion", headers=user, params={"hour": 20}).json()
     foods = {i["food"] for i in r["items"]}
     assert foods and foods <= {"חזה עוף", "אורז לבן", "סלט ירקות"}  # no cereal for dinner
+    assert all(i["food_id"] == food_id(client, i["food"]) for i in r["items"])
 
 
 def test_disliked_food_is_never_suggested(client, user):
@@ -94,6 +95,15 @@ def test_tdee_adapts_after_weeks_of_data(client, user, clock):
     clock.today = start + timedelta(days=28)
     update = client.get("/today", headers=user).json()["target_update"]
 
-    assert update["observed"] > initial + 200     # the data says: you burn more than we guessed
-    assert update["tdee"] == pytest.approx(initial + 150)  # but we move carefully (capped step)
-    assert client.get("/today", headers=user).json()["target_update"] is None  # not again this week
+    assert update["previous_tdee"] == pytest.approx(initial)
+    assert update["tdee"] == pytest.approx(initial + 150)  # the data says more, but we move carefully (capped step)
+
+    # Idempotent: a second request the same day reports the same update, and doesn't update again.
+    assert client.get("/today", headers=user).json()["target_update"] == update
+    clock.today += timedelta(days=1)
+    assert client.get("/today", headers=user).json()["target_update"] is None
+
+
+def test_no_banner_when_update_had_too_little_data(client, user, clock):
+    clock.today += timedelta(days=7)  # an update is due, but nothing was logged
+    assert client.get("/today", headers=user).json()["target_update"] is None
