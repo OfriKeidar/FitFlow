@@ -64,7 +64,7 @@ export default function App() {
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Today />} />
-              <Route path="/chat" element={<Chat />} />
+              <Route path="/log" element={<Chat />} />
               <Route path="/meal" element={<Meal />} />
               <Route path="/workouts" element={<Workouts />} />
               <Route path="/progress" element={<Suspense fallback={<Loader />}><Progress /></Suspense>} />

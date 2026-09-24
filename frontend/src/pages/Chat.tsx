@@ -60,17 +60,20 @@ export function Chat() {
   return (
     <>
       <div className="page-header">
-        <h1>המאמן</h1>
+        <h1>רישום חכם</h1>
         <span className="muted"><Icon name="sparkles" size={16} /> AI</span>
       </div>
+      <p className="muted" style={{ marginTop: -8 }}>
+        כתוב בחופשיות מה אכלת או איך התאמנת. אני אחשב קלוריות וערכים, ותאשר לפני שזה נשמר.
+        אפשר גם לשאול שאלות, כמו "מה לאכול לערב?"
+      </p>
 
       {loaded && messages.length === 0 && (
         <div className="card stack fade-in">
           <div className="row" style={{ justifyContent: 'flex-start' }}>
             <Logo size={36} />
-            <p>היי {user.name}! ספר לי מה אכלת או איך התאמנת, ואני ארשום ואחשב בשבילך.</p>
+            <p>היי {user.name}! מה אכלת או איך התאמנת היום? נסה אחת מהדוגמאות:</p>
           </div>
-          <p className="muted">כל רישום מחכה לאישור שלך לפני שהוא נשמר.</p>
           <div className="chips">
             {EXAMPLES.map((ex) => (
               <button key={ex} className="chip" onClick={() => send(ex)}>{ex}</button>

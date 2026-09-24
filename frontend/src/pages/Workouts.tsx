@@ -30,7 +30,7 @@ export function Workouts() {
       </div>
 
       {week.data ? <WeekSummary week={week.data} /> : <div className="skeleton" style={{ height: 200 }} />}
-      {stats.data && <StatsGrid stats={stats.data} />}
+      {stats.data && <StatsGrid stats={stats.data} goal={week.data?.goal ?? 0} />}
       <LogWorkout onLogged={() => { week.reload(); stats.reload(); insights.reload() }} />
 
       <h2>תובנות</h2>
@@ -54,16 +54,17 @@ function lastWorkoutText(days: number | null): string {
   return `לפני ${days} ימים`
 }
 
-function StatsGrid({ stats }: { stats: WorkoutStats }) {
+function StatsGrid({ stats, goal }: { stats: WorkoutStats; goal: number }) {
   const items: { icon: IconName; color: string; label: string; value: string }[] = [
     { icon: 'clock', color: 'var(--carbs)', label: 'אימון אחרון', value: lastWorkoutText(stats.days_since_last) },
-    { icon: 'flame', color: '#D85A30', label: 'רצף שבועות ביעד', value: `${stats.current_week_streak} שבועות` },
-    { icon: 'trophy', color: 'var(--fat)', label: 'השיא שלך', value: `${stats.best_week_streak} שבועות` },
+    { icon: 'flame', color: '#D85A30', label: 'שבועות ברצף ביעד', value: `${stats.current_week_streak}` },
+    { icon: 'trophy', color: 'var(--fat)', label: 'שיא שבועות ברצף', value: `${stats.best_week_streak}` },
     { icon: 'calendar', color: 'var(--accent)', label: 'החודש', value: `${stats.this_month} אימונים` },
     { icon: 'run', color: 'var(--cardio)', label: 'דקות השבוע', value: `${Math.round(stats.minutes_this_week)}` },
     { icon: 'heart', color: 'var(--danger)', label: 'האהוב עליך', value: stats.favorite_activity ? activityName(stats.favorite_activity) : '—' },
   ]
   return (
+    <div className="stack" style={{ gap: 6 }}>
     <div className="grid-2">
       {items.map((item) => (
         <div key={item.label} className="stat-tile">
@@ -74,6 +75,10 @@ function StatsGrid({ stats }: { stats: WorkoutStats }) {
           </span>
         </div>
       ))}
+    </div>
+    <p className="muted" style={{ fontSize: 12 }}>
+      "שבוע ביעד" הוא שבוע עם לפחות {goal} אימונים (היעד השבועי שלך). הרצף סופר שבועות כאלה ברציפות.
+    </p>
     </div>
   )
 }

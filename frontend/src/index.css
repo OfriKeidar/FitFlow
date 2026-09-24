@@ -227,3 +227,14 @@ label.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; 
   background: none; border: none; padding: 0; cursor: pointer;
   color: var(--accent-text); text-decoration: underline; font-size: inherit;
 }
+
+/* The raised "+ Log" button in the middle of the bottom nav */
+.nav a.nav-main { color: var(--accent-text); }
+.nav-main-button {
+  width: 52px; height: 52px; margin-top: -26px; border-radius: 50%;
+  display: grid; place-items: center; color: #fff; background: var(--accent);
+  border: 4px solid var(--bg); transition: transform 0.15s;
+}
+.nav a.nav-main:hover .nav-main-button { transform: scale(1.06); }
+.nav a.nav-main.active .nav-main-button { transform: rotate(45deg); } /* the + turns into an x while you're there */
+.nav a.nav-main.active svg { animation: none; }

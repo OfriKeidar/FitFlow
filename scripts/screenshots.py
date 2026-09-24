@@ -22,7 +22,7 @@ from scripts.seed_demo import DEMO_EMAIL
 
 APP_URL = os.getenv("APP_URL", "http://localhost:5173")
 OUT = Path(__file__).resolve().parents[1] / "docs" / "screenshots"
-PAGES = [("today", "/"), ("chat", "/chat"), ("meal", "/meal"), ("workouts", "/workouts"), ("progress", "/progress")]
+PAGES = [("today", "/"), ("chat", "/log"), ("meal", "/meal"), ("workouts", "/workouts"), ("progress", "/progress")]
 
 
 def main() -> None:

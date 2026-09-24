@@ -1,13 +1,12 @@
-import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { api, errorMessage } from '../api/client'
-import type { ChatReply, DailyStatus } from '../api/types'
-import { ActionCard } from '../components/ActionCard'
+import { api } from '../api/client'
+import type { DailyStatus, Goal } from '../api/types'
 import { Icon, type IconName } from '../components/Icon'
 import { Ring } from '../components/Ring'
 import { useApi } from '../hooks/useApi'
 import { useCountUp } from '../hooks/useCountUp'
-import { activityName, greeting, weekdayName } from '../labels'
+import { GOAL_LABELS, activityName, formatDate, greeting, weekdayName } from '../labels'
 import { useUser } from '../user'
 
 export function Today() {
@@ -20,6 +19,7 @@ export function Today() {
   return (
     <>
       <Greeting day={data.day} />
+      <GoalCard />
       {data.target_update && <TargetUpdateBanner status={data} />}
       <CalorieCard status={data} />
       <MacroRings status={data} />
@@ -31,8 +31,8 @@ export function Today() {
         </Link>
       )}
 
-      <QuickAdd onLogged={reload} />
-      <FoodLog status={data} onChange={reload} />
+      <Meals status={data} onChange={reload} />
+      <TodaysWorkouts status={data} onChange={reload} />
     </>
   )
 }
@@ -128,90 +128,96 @@ function TargetUpdateBanner({ status }: { status: DailyStatus }) {
   )
 }
 
-/** Free-text logging right from the dashboard - goes through the AI coach, with confirmation. */
-function QuickAdd({ onLogged }: { onLogged: () => void }) {
-  const [text, setText] = useState('')
-  const [sending, setSending] = useState(false)
-  const [result, setResult] = useState<ChatReply | null>(null)
-  const [error, setError] = useState<string | null>(null)
+const GOAL_ICONS: Record<Goal, IconName> = { cut: 'trendDown', bulk: 'trendUp', maintain: 'equal' }
 
-  async function send() {
-    if (!text.trim()) return
-    setSending(true)
-    setError(null)
-    try {
-      setResult(await api.chat(text.trim()))
-      setText('')
-    } catch (e) {
-      setError(errorMessage(e))
-    } finally {
-      setSending(false)
-    }
+/** The user's chosen track, always visible at the top: goal, target weight and the estimated date. */
+function GoalCard() {
+  const user = useUser()
+  const { data: progress } = useApi(api.progress)
+  const plan = progress?.plan
+
+  let detail = 'שומרים על המשקל הנוכחי'
+  if (user.target_weight_kg != null) {
+    detail = `יעד ${user.target_weight_kg} ק"ג`
+    if (plan?.target_date) detail += ` · עד ${formatDate(plan.target_date)} בערך`
+    else if (plan && plan.weeks_to_target === null) detail += ' · הגעת ליעד!'
   }
 
   return (
-    <div className="stack">
-      <form className="row" onSubmit={(e) => { e.preventDefault(); send() }}>
-        <input
-          className="input" value={text} onChange={(e) => setText(e.target.value)}
-          placeholder="אכלתי חופן שקדים ויוגורט" disabled={sending} aria-label="מה אכלת או עשית?"
-        />
-        <button className="btn primary" disabled={sending} aria-label="הוספה">
-          <Icon name={sending ? 'sparkles' : 'plus'} />
-        </button>
-      </form>
-      {error && <p className="error-text">{error}</p>}
-      {result && (
-        <>
-          <p className="muted fade-in">{result.reply}</p>
-          {result.actions.map((a) => <ActionCard key={a.id} action={a} onResolved={onLogged} />)}
-        </>
-      )}
+    <Link to="/progress" className="card row fade-in" style={{ textDecoration: 'none', color: 'inherit', gap: 12 }}>
+      <span className="stat-icon" style={{ background: 'var(--accent-soft)', color: 'var(--accent-text)' }}>
+        <Icon name={GOAL_ICONS[user.goal]} size={20} />
+      </span>
+      <span style={{ flex: 1 }}>
+        <div className="muted" style={{ fontSize: 12 }}>המסלול שלך</div>
+        <div style={{ fontWeight: 500 }}>{GOAL_LABELS[user.goal]}</div>
+        <div className="muted">{detail}</div>
+      </span>
+      <span className="muted">‹</span>
+    </Link>
+  )
+}
+
+/** A titled card with an "add" button that opens the smart log (the AI chat). */
+function Section(props: { title: string; icon: IconName; addLabel: string; children: ReactNode }) {
+  return (
+    <div className="card stack" style={{ gap: 6 }}>
+      <div className="row">
+        <h2 className="row" style={{ gap: 6 }}><Icon name={props.icon} /> {props.title}</h2>
+        <Link to="/log" className="btn small" style={{ textDecoration: 'none' }}>
+          <Icon name="plus" size={14} /> {props.addLabel}
+        </Link>
+      </div>
+      {props.children}
     </div>
   )
 }
 
-function FoodLog({ status, onChange }: { status: DailyStatus; onChange: () => void }) {
-  if (status.entries.length === 0 && status.workouts.length === 0) {
-    return (
-      <div className="card" style={{ textAlign: 'center' }}>
-        <div className="empty-icon"><Icon name="kitchen" size={28} /></div>
-        <p>עוד לא רשמת כלום היום</p>
-        <p className="muted">כתוב למעלה מה אכלת, או <Link to="/chat">דבר עם המאמן</Link></p>
-      </div>
-    )
-  }
-
-  async function remove(kind: 'food' | 'workout', id: number) {
-    await (kind === 'food' ? api.deleteFood(id) : api.deleteWorkout(id))
+function Meals({ status, onChange }: { status: DailyStatus; onChange: () => void }) {
+  async function remove(id: number) {
+    await api.deleteFood(id)
     onChange()
   }
-
   return (
-    <div className="card">
+    <Section title="מה אכלתי היום" icon="kitchen" addLabel="הוספת אוכל">
+      {status.entries.length === 0 && (
+        <p className="muted">עוד לא רשמת אוכל היום. לחץ על "הוספת אוכל" וכתוב בחופשיות מה אכלת.</p>
+      )}
       {status.entries.map((e) => (
-        <div key={e.id} className="row" style={{ padding: '6px 0', borderBottom: '0.5px solid var(--border)' }}>
+        <div key={e.id} className="row" style={{ padding: '4px 0', borderBottom: '0.5px solid var(--border)' }}>
           <span>{e.servings !== 1 ? `${e.servings} × ` : ''}{e.description}</span>
           <span className="row muted" style={{ gap: 4 }}>
-            {Math.round(e.kcal)} · {Math.round(e.protein_g)} ח'
-            <button className="btn icon" onClick={() => remove('food', e.id)} aria-label={`מחיקת ${e.description}`}>
+            {Math.round(e.kcal)} קק"ל · {Math.round(e.protein_g)} ח'
+            <button className="btn icon" onClick={() => remove(e.id)} aria-label={`מחיקת ${e.description}`}>
               <Icon name="trash" size={16} />
             </button>
           </span>
         </div>
       ))}
+    </Section>
+  )
+}
+
+function TodaysWorkouts({ status, onChange }: { status: DailyStatus; onChange: () => void }) {
+  async function remove(id: number) {
+    await api.deleteWorkout(id)
+    onChange()
+  }
+  return (
+    <Section title="האימונים שלי היום" icon="barbell" addLabel="הוספת אימון">
+      {status.workouts.length === 0 && <p className="muted">עוד לא נרשם אימון היום.</p>}
       {status.workouts.map((w) => (
-        <div key={w.id} className="row" style={{ padding: '6px 0' }}>
-          <span><Icon name="run" size={16} /> {activityName(w.activity)} {w.minutes} דק'</span>
+        <div key={w.id} className="row" style={{ padding: '4px 0' }}>
+          <span><Icon name="run" size={16} /> {activityName(w.activity)} · {w.minutes} דק'</span>
           <span className="row" style={{ gap: 4, color: 'var(--accent)' }}>
-            +{Math.round(w.kcal)}
-            <button className="btn icon" onClick={() => remove('workout', w.id)} aria-label="מחיקת אימון">
+            +{Math.round(w.kcal)} קק"ל
+            <button className="btn icon" onClick={() => remove(w.id)} aria-label="מחיקת אימון">
               <Icon name="trash" size={16} />
             </button>
           </span>
         </div>
       ))}
-    </div>
+    </Section>
   )
 }
 

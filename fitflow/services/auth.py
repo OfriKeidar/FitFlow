@@ -19,7 +19,8 @@ import jwt
 
 # In production JWT_SECRET must be set to a long random value. The development fallback is
 # fine locally, but anyone who knows it could forge tokens - never deploy with it.
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-only-insecure-secret-change-me")
+# `or`, not a getenv default: an empty JWT_SECRET= line in .env must also fall back.
+JWT_SECRET = os.getenv("JWT_SECRET") or "dev-only-insecure-secret-change-me"
 JWT_ALGORITHM = "HS256"
 TOKEN_LIFETIME = timedelta(days=7)
 

@@ -50,7 +50,7 @@ def get_agent() -> CoachAgent:
     agent = _shared_agent()
     client = agent.client
     # Without credentials the SDK would fail deep inside the request; fail early with a clear message.
-    if client.api_key is None and client.auth_token is None and client.credentials is None:
+    if not client.api_key and not client.auth_token and client.credentials is None:  # empty counts as missing
         raise HTTPException(503, "The coach is not configured: set ANTHROPIC_API_KEY on the server")
     return agent
 
