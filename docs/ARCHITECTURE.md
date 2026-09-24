@@ -1,80 +1,133 @@
-# FitFlow — ארכיטקטורה והסבר לראיונות
+# FitFlow - Architecture and Design Notes
 
-## העיקרון: ליבה דטרמיניסטית, AI בשוליים
-ה-LLM **לא מחשב אף מספר**. הוא רק מתרגם טקסט חופשי ("אכלתי 2 ביצים ורצתי חצי שעה")
-לקריאות לפונקציות שלנו. כל החישובים הם פונקציות Python טהורות עם בדיקות —
-ולכן המערכת אמינה, ניתנת לבדיקה, וזולה.
+These notes explain what each part of the system does and **why** it was built that way.
+They double as interview preparation: each "Why" is an answer to a likely question.
 
-## שכבות
+## Core principle: deterministic core, AI at the edges
+
+The LLM **never computes a number**. It translates free text ("I ate 2 eggs and ran for
+half an hour") into calls to our own functions. Every calculation is a plain Python function
+with unit tests, so the system is reliable, testable, and cheap to run.
+
+## Layers
+
 ```
-api/       ← HTTP (FastAPI): ולידציה, הרשאות, JSON   ✅
-ai/        ← סוכן צ'אט: LLM + tools                  [שלב הבא]
-services/  ← use-cases: טוען מה-DB, מריץ domain, שומר ✅
-db/        ← SQLAlchemy (SQLite בפיתוח, PostgreSQL בפרודקשן) ✅
-domain/    ← האלגוריתמים. בלי DB, בלי רשת.            ✅
+api/       HTTP (FastAPI): validation, auth, JSON in/out
+ai/        The coach agent: LLM + tools
+services/  Use-cases: load from the DB, run domain logic, save results
+db/        SQLAlchemy models (SQLite in development, PostgreSQL in production)
+domain/    The algorithms. No database, no network, no AI.
 ```
-`services/mappers.py` מתרגם בין שורות DB לאובייקטי domain — כך ה-domain לא מכיר את SQLAlchemy בכלל.
-כל שכבה תלויה רק במה שמתחתיה. אפשר להחליף DB או ספק LLM בלי לגעת באלגוריתמים.
 
-## המודולים ב-domain
+Each layer only depends on the layers below it. `services/mappers.py` converts database rows
+into domain objects, so the domain layer never imports SQLAlchemy.
 
-### `energy.py` — יעדים התחלתיים
-- **BMR** בנוסחת Mifflin-St Jeor, כפול מקדם פעילות = **TDEE**.
-- יעד קלורי = TDEE ± (קצב שבועי × 7700 ÷ 7). 0.5 ק"ג/שבוע ⇐ 550 קק"ל גרעון ביום.
-- מאקרו: חלבון לפי ק"ג גוף, שומן 25% מהקלוריות, פחמימות = השארית.
-- **בטיחות**: קצב ירידה מקסימלי 1% ממשקל הגוף בשבוע, רצפת קלוריות.
+**Why:** the valuable logic (algorithms) is isolated and trivially testable. You could replace
+the database or the LLM provider without touching a single algorithm.
 
-### `activity.py` — קלוריות מאימון
-`(MET − 1) × משקל × שעות`. מחסירים 1 MET כי המנוחה כבר נספרת ב-BMR —
-אחרת היינו סופרים אותה פעמיים. (שאלת ראיון טובה!)
+## Domain modules
 
-### `trend.py` — המערכת לומדת את חילוף החומרים שלך
-1. **החלקת משקל (EWMA)**: המשקל קופץ ±1 ק"ג ממים ומלח. ממוצע נע אקספוננציאלי מסנן רעש.
-   ה-alpha תלוי בפער הימים: `1 − 0.9^ימים` — לכן זה עובד גם בשקילה יומית, שבועית או חודשית.
-   (שקילה נדירה = כל מדידה "שווה" יותר, אבל ההערכה רועשת יותר.)
-2. **TDEE אדפטיבי** (שימור אנרגיה):
-   `הוצאה = צריכה ממוצעת − (שיפוע המשקל בק"ג ליום × 7700) − אימונים ממוצעים`
-   השיפוע מחושב ב-**רגרסיה ליניארית (least squares)** ולא מה-EWMA.
-   **סיפור לראיון:** בגרסה הראשונה השתמשתי במגמת ה-EWMA, ובדיקת אינטגרציה חשפה
-   שהיא מפגרת אחרי ירידה עקבית — עם 4 שקילות שבועיות ה-TDEE יצא נמוך בכ-150 קק"ל.
-   רגרסיה לא מפגרת על מגמה קבועה ועדיין ממצעת רעש. EWMA נשאר לגרף.
-3. **הגנות**: מינימום 14 יום, מינימום 70% ימים מתועדים, זזים רק חצי מהדרך
-   להערכה החדשה, ולא יותר מ-150 קק"ל בעדכון.
+### `energy.py` - initial targets
+- **BMR** with the Mifflin-St Jeor formula, multiplied by an activity factor = **TDEE**
+  (total daily energy expenditure).
+- Calorie target = TDEE +/- (weekly rate x 7700 / 7). Losing 0.5 kg/week = a 550 kcal daily deficit.
+- Macros: protein by body weight, fat as 25% of calories, carbs fill the rest.
+- Goals: cut, maintain, bulk, and recomp (a 5% deficit with high protein).
+- **Safety limits:** at most 1% of body weight lost per week, and a minimum calorie floor.
 
-> שדרוג עתידי לדבר עליו: Kalman Filter — מעריך משקל ו-TDEE יחד ויודע כמה הוא "בטוח".
+### `activity.py` - workout calories
+`(MET - 1) x weight_kg x hours`, and every activity belongs to a category (strength / cardio / other).
+**Why subtract 1 MET?** Resting energy is already counted in the BMR. Without the subtraction,
+the hour of resting burn during a workout would be counted twice.
 
-### `optimizer.py` — "מה לאכול עכשיו ממה שיש בבית"
-**Integer Linear Programming** (PuLP + CBC):
-- **משתנים**: כמה מנות מכל מזון (שלם) + האם המזון נבחר (בינארי).
-- **אילוצים**: רק מה שיש בבית ובכמות שיש, מתאים לסוג הארוחה, לא מזונות שהמשתמש לא אוהב,
-  עד 4 מזונות, עד 2 מאותה קטגוריה — כדי שהארוחה תהיה הגיונית.
-- **מטרה**: מזעור סטייה מהמאקרו שנשארו. חוסר בחלבון וחריגה בקלוריות נענשים הכי חזק.
-- **טריק ה-|x|**: מפצלים סטייה ל-under ו-over חיוביים — כך ערך מוחלט נשאר ליניארי.
+### `trend.py` - learning the user's real metabolism
+1. **Weight smoothing (EWMA).** Scale weight jumps +/-1 kg a day from water and salt. An
+   exponential moving average filters that noise for the progress chart. Alpha depends on the
+   gap between weigh-ins (`1 - 0.9^days`), so it works for daily, weekly or monthly weigh-ins.
+2. **Adaptive TDEE (energy balance).**
+   `expenditure = average intake - (weight slope in kg/day x 7700) - average workout calories`.
+   The slope comes from a **least-squares linear regression**, not from the EWMA.
+   **Interview story:** the first version used the EWMA trend. An API integration test exposed
+   that EWMA *lags behind* steady weight loss: with 4 weekly weigh-ins it underestimated TDEE
+   by ~150 kcal. Regression has no lag on a steady trend and still averages out noise, so it
+   now drives the math and EWMA is only used for the chart.
+3. **Safeguards:** at least 14 days of data, food logged on at least 70% of those days, move
+   only halfway towards the new estimate, and never more than 150 kcal per update.
 
-למה לא greedy? greedy בוחר "הכי הרבה חלבון" ומפספס את השילוב. ILP מוצא את
-השילוב האופטימלי תחת כל האילוצים יחד. זו בעיה ממשפחת Knapsack (NP-קשה), אבל
-עם 20-50 מזונות CBC פותר אותה באלפיות שנייה.
+> Future upgrade to discuss: a Kalman filter, which estimates weight and TDEE together and
+> tracks how confident it is in each.
 
-### `insights.py` — זיהוי דפוסים
-סטטיסטיקה פשוטה: סופ"ש מול ימי חול, עמידה ביעד חלבון בימי אימון מול מנוחה, רצף שבועות אימון.
-כל תובנה מדווחת רק אם יש **מספיק נתונים** וגם **האפקט מספיק גדול** — אחרת זה רעש.
-השבוע והסופ"ש מוגדרים לפי ישראל (ראשון–שבת, שישי–שבת).
+### `optimizer.py` - "what should I eat from what I have at home?"
+**Integer Linear Programming** with PuLP and the CBC solver:
+- **Variables:** how many servings of each food (integer), and whether each food is used (binary).
+- **Constraints:** only foods at home and in the available amounts, suitable for the time of day,
+  not disliked, at most 4 foods and at most 2 from the same category, so the meal makes sense.
+- **Objective:** minimize the distance from the remaining macros. Missing protein and going
+  over calories are penalized the most.
+- **The |x| trick:** each deviation is split into two non-negative variables (`under` and `over`),
+  which keeps an absolute value linear.
 
-## החלטות תכנון ב-DB
-- **Snapshot של ערכים תזונתיים** ביומן: כשרושמים אוכל, הערכים מועתקים לשורה.
-  אם מתקנים מזון במאגר — ההיסטוריה של המשתמש לא משתנה בשקט.
-- **שקילה אחת ליום** (unique constraint) — שקילה חוזרת מחליפה.
-- **יום בלי רישום ≠ יום בלי אוכל** — ימים לא מתועדים לא נכנסים לחישובים.
-- **מחיקה של רשומה של משתמש אחר מחזירה 404** (לא 403) — לא מדליפים שהרשומה קיימת.
+**Why not a greedy algorithm?** Greedy picks "the most protein first" and misses good
+combinations. ILP finds the best combination under all constraints at once. The problem is
+knapsack-like (NP-hard in general), but with 20-50 foods CBC solves it in milliseconds.
+
+### `insights.py` - pattern detection
+Simple statistics: weekend vs weekday eating, hitting the protein target on training days vs
+rest days, and weekly workout streaks. An insight is reported only when there is **enough
+data** and the **effect is large enough**. Otherwise it's just noise.
+The week follows the Israeli calendar (Sunday to Saturday, with Friday and Saturday as the weekend).
+
+## The AI layer (`ai/`)
+
+### How a chat turn works
+```
+user message
+    -> send conversation + tool definitions to Claude  <------------+
+    -> Claude answers. Does it want tools? (stop_reason == tool_use) |
+         yes: run each tool with OUR code, send results back -------+
+         no:  final reply -> save the whole turn, return it
+```
+The loop is written by hand in `agent.py` (not the SDK's tool runner) so every step is visible
+and under our control.
+
+### Design decisions
+- **Human in the loop.** There is no tool that writes to the log. `propose_*` tools create a
+  `PendingAction` with a preview, and only the user's Confirm click writes data. The model
+  cannot bypass this, even if it misunderstands or is manipulated by a prompt.
+- **Numbers come from tools.** Nutrition comes from the food database, workout calories from our
+  MET formula, and remaining targets from `daily_status`. The one exception is foods missing from the
+  database: the model estimates them, and the proposal is labelled as an estimate for the user to confirm.
+- **Model output is untrusted input.** Tool arguments are validated with Pydantic. Invalid
+  arguments go back to the model as an `is_error` tool result, so it can correct itself.
+- **Atomic turns.** Chat messages and pending actions from one turn are committed together. On a
+  refusal, an API error, or too many tool rounds, the whole turn is rolled back.
+- **Safety limits.** A cap of 8 tool rounds per turn stops an endless loop.
+- **Conversation storage.** Messages are stored verbatim (all content blocks). The API requires
+  earlier blocks to be replayed unchanged. There is one conversation per day, which keeps the
+  context small.
+- **Model settings.** `claude-opus-5` with `effort: medium` (chat doesn't need deep reasoning),
+  adaptive thinking, prompt caching of the conversation prefix, and server-side refusal fallbacks.
+- **Testability.** The Anthropic client is injected, so tests use a scripted fake. The tests cover
+  our loop, gate, persistence and error handling, with no API key and no cost.
+
+## Database design decisions
+- **Nutrition snapshots.** A log entry copies the food's values at logging time. Fixing a food in
+  the database later doesn't silently rewrite the user's history.
+- **One weigh-in per day** (unique constraint). Logging again replaces the earlier value.
+- **"No entries" does not mean "ate nothing".** Unlogged days are excluded from calculations.
+- **Accessing another user's entry returns 404, not 403**, so we don't leak that it exists.
+- **Confirming an action twice returns 404**, so a double click never logs twice.
 
 ## API
 `POST /users` · `GET/PATCH /me` · `GET /foods?q=` · `GET/PUT/DELETE /pantry/{id}` · `/disliked/{id}`
 `POST /log/food` · `/log/custom-food` · `/log/workout` · `/log/weight` · `DELETE /log/...`
-`GET /today` (דשבורד + עדכון יעדים שבועי) · `/coach/meal-suggestion?hour=` · `/coach/insights`
+`GET /today` (dashboard, plus the weekly target update) · `/coach/meal-suggestion?hour=` · `/coach/insights`
 `GET /workouts/week` · `/progress`
+`POST /chat` · `GET /chat/history` · `POST /chat/actions/{id}/confirm` · `/reject`
 
-אימות כרגע ב-header `X-User-Id` — יוחלף ב-JWT לפני deploy.
+Authentication currently uses an `X-User-Id` header. It must be replaced with JWT before deployment.
 
-## בדיקות
-`pytest` — כולל סימולציה של משתמש עם TDEE ידוע ורעש במשקל, ובדיקה שהאלגוריתם
-"מגלה" את ה-TDEE בשקילה יומית, שבועית וחודשית.
+## Tests
+`pytest` runs 65 tests. They include a simulated user with a known TDEE and noisy weigh-ins,
+checking that the algorithm recovers the TDEE for daily, weekly and monthly weigh-ins, plus
+end-to-end API tests and agent tests with a fake LLM.

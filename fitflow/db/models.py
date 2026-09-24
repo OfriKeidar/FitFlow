@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -107,3 +107,37 @@ class DislikedFood(Base):
     food_id: Mapped[int] = mapped_column(ForeignKey("foods.id"), primary_key=True)
 
     food: Mapped[Food] = relationship(lazy="joined")
+
+
+class ChatMessage(Base):
+    """One message in the coach conversation, stored exactly as sent to / received from the LLM.
+
+    `content` is JSON: a plain string for user text, or a list of content blocks
+    (text, tool_use, tool_result, thinking...). We must replay these blocks unchanged
+    on the next request, so we store them verbatim instead of only the visible text.
+    """
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    day: Mapped[date] = mapped_column(index=True)  # one conversation per day
+    role: Mapped[str] = mapped_column(String(10))  # "user" | "assistant"
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class PendingAction(Base):
+    """Something the AI wants to write (food, workout, weight) - saved only after the user confirms.
+
+    This is the human-in-the-loop gate: the LLM can propose, but only a user click writes data.
+    """
+    __tablename__ = "pending_actions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    day: Mapped[date]
+    kind: Mapped[str] = mapped_column(String(20))    # "food" | "custom_food" | "workout" | "weight"
+    payload: Mapped[str] = mapped_column(Text)       # validated JSON input for the action
+    summary: Mapped[str] = mapped_column(Text)       # human-readable preview shown in the app
+    status: Mapped[str] = mapped_column(String(10), default="pending")  # pending | confirmed | rejected
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())

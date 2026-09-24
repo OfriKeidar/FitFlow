@@ -185,3 +185,27 @@ class ProgressOut(BaseModel):
     weigh_ins: list[WeightOut]
     trend: list[WeightOut]
     tdee: float
+
+
+# --- chat ---
+
+class ChatIn(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+    hour: int | None = Field(default=None, ge=0, le=23)  # the user's local hour, for meal suggestions
+
+
+class PendingActionOut(ORM):
+    id: int
+    kind: str
+    summary: str
+    status: str
+
+
+class ChatOut(BaseModel):
+    reply: str
+    actions: list[PendingActionOut]
+
+
+class ChatHistoryItem(BaseModel):
+    role: str
+    text: str

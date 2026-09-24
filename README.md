@@ -14,7 +14,7 @@ from what you have at home.
 | Meal suggestions | Integer Linear Programming (PuLP / CBC) over the user's pantry |
 | Workout burn | Net MET calculation, strength / cardio / other |
 | Insights | Weekend vs weekday intake, protein on training days, workout streaks |
-| Chat logging | LLM tool-use agent *(in progress)* |
+| Chat coach | Claude tool-use agent; proposes entries, the user confirms before anything is saved |
 
 ## Run
 ```bash
@@ -23,5 +23,8 @@ python -m venv .venv
 .venv/Scripts/python -m pytest                          # tests
 .venv/Scripts/uvicorn fitflow.api.main:app --reload     # API docs at http://localhost:8000/docs
 ```
+The chat endpoint needs an Anthropic API key in the `ANTHROPIC_API_KEY` environment variable.
+Everything else, including all tests, runs without it.
+
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design notes.

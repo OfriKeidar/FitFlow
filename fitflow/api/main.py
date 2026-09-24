@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from fitflow.api.routes import coach, foods, log, users
+from fitflow.api.routes import chat, coach, foods, log, users
 from fitflow.db.models import Base
 from fitflow.db.seed import seed_foods
 from fitflow.db.session import SessionLocal, engine
@@ -20,5 +20,5 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="FitFlow", version="0.1.0", lifespan=lifespan)
-for module in (users, foods, log, coach):
+for module in (users, foods, log, coach, chat):
     app.include_router(module.router)
