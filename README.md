@@ -1,5 +1,7 @@
 # FitFlow
 
+[![CI](https://github.com/OfriKeidar/FitFlow/actions/workflows/ci.yml/badge.svg)](https://github.com/OfriKeidar/FitFlow/actions/workflows/ci.yml)
+
 **An adaptive nutrition & training coach.** Tell it what you ate in plain language, and it tracks
 calories and macros, **learns your real metabolism from your own data**, and suggests meals from what
 you have at home using an optimization algorithm.
