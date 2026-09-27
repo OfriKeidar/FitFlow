@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
@@ -12,9 +13,24 @@ from fitflow.services import actions
 router = APIRouter(prefix="/chat", tags=["chat"])
 log = logging.getLogger("fitflow.chat")
 
+# Each message costs several model requests, and free-tier quotas are small and shared by all
+# users - so one user can't use up the coach for everyone.
+DAILY_MESSAGE_LIMIT = int(os.getenv("CHAT_DAILY_LIMIT", "30"))
+
+
+def messages_sent_today(db: DB, user: CurrentUser, today) -> int:
+    """User-written messages today. (Tool results are also stored with role "user" in Anthropic's
+    format, but as a list of blocks - a message the user typed is a plain string.)"""
+    return sum(
+        1 for m in load_history(db, user, today)
+        if m.get("role") == "user" and isinstance(m.get("content"), str)
+    )
+
 
 @router.post("", response_model=ChatOut)
 def send_message(body: ChatIn, user: CurrentUser, db: DB, today: Today, agent: Agent):
+    if messages_sent_today(db, user, today) >= DAILY_MESSAGE_LIMIT:
+        raise HTTPException(429, f"Daily chat limit reached ({DAILY_MESSAGE_LIMIT} messages)")
     hour = datetime.now().hour if body.hour is None else body.hour
     try:
         reply = agent.chat(db, user, body.message, today, hour)

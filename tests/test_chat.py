@@ -204,6 +204,19 @@ def test_api_outage_returns_503(client, user, llm):
     assert client.post("/chat", headers=user, json={"message": "hi"}).status_code == 503
 
 
+def test_daily_message_limit(client, user, llm, monkeypatch):
+    from fitflow.api.routes import chat as chat_route
+    monkeypatch.setattr(chat_route, "DAILY_MESSAGE_LIMIT", 2)
+    # Tool rounds don't count: the first message uses a tool, and it's still just one message.
+    llm.script = [reply(tool_call("get_today_status", {})), reply(text("1")), reply(text("2"))]
+    chat(client, user, "first")
+    chat(client, user, "second")
+
+    r = client.post("/chat", headers=user, json={"message": "third"})
+    assert r.status_code == 429 and "Daily chat limit" in r.json()["detail"]
+    assert llm.script == []  # the model wasn't called for the blocked message
+
+
 def test_missing_api_key_returns_503(client, user, monkeypatch):
     from fitflow.api.deps import _shared_agent
     for name in ("LLM_PROVIDER", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):

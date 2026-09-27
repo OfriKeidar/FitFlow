@@ -64,6 +64,9 @@ export function errorMessage(e: unknown): string {
   if (e instanceof ApiError && e.detail.includes('not configured')) {
     return 'המאמן עוד לא מחובר: צריך להגדיר מפתח GEMINI_API_KEY (חינמי) בקובץ .env בשרת.'
   }
+  if (e instanceof ApiError && e.detail.startsWith('Daily chat limit')) {
+    return 'הגעת למכסת ההודעות היומית של המאמן. נתראה מחר! בינתיים אפשר לרשום ידנית באימונים ובמה לאכול.'
+  }
   if (e instanceof ApiError && e.detail.startsWith('The coach is')) {
     // The AI runs on a free tier: short overloads and per-minute limits are normal, not a bug.
     return 'המאמן עמוס כרגע, נסה שוב בעוד דקה.'

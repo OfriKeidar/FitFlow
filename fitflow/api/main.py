@@ -2,11 +2,13 @@
 (In production, fitflow/web.py serves this app under /api together with the built frontend.)"""
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
 from fitflow.api.routes import auth, chat, coach, foods, log, users
+from fitflow.db.demo import create_demo_user, demo_exists
 from fitflow.db.models import Base
 from fitflow.db.seed import seed_foods
 from fitflow.db.session import SessionLocal, engine
@@ -22,6 +24,10 @@ def init_db() -> None:
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
         seed_foods(db)
+        # On a public demo server, create the demo account visitors can log in with.
+        if os.getenv("SEED_DEMO", "").lower() in ("1", "true", "yes") and not demo_exists(db):
+            create_demo_user(db)
+            logging.getLogger("fitflow").info("created the demo account")
 
 
 @asynccontextmanager

@@ -15,6 +15,10 @@ services:
         generateValue: true  # Render generates a long random secret
       - key: GEMINI_API_KEY
         sync: false  # set by hand in the dashboard (free key from Google AI Studio); never committed to git
+      - key: SEED_DEMO
+        value: "true"  # create demo@fitflow.app / demo1234 on first start, so visitors can try the app
+      - key: CHAT_DAILY_LIMIT
+        value: "30"  # AI messages per user per day; protects the free-tier quota
 
 databases:
   - name: fitflow-db

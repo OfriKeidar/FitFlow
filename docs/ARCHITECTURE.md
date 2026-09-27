@@ -117,6 +117,8 @@ This is the Adapter / Strategy pattern:
   Claude's thinking blocks, and it's covered by a regression test.
 - **Observability.** At first the chat returned 503 with nothing in the server log, so it couldn't be debugged.
   Now every model call logs its model and duration, fallbacks are warnings, and LLM failures log a full traceback.
+- **A daily limit per user** (`CHAT_DAILY_LIMIT`, 30 by default). The free quota is shared by everyone, so one
+  user can't use it up. Only messages the user typed count, not tool rounds, and a blocked message never reaches the model.
 - **Hebrew grammatical gender.** Gemini guessed the user's gender from the name ("דנה" -> feminine verbs),
   but the profile said male. The per-user context now says explicitly which forms to use.
 
@@ -223,6 +225,6 @@ src/pages/      Onboarding, Today, Chat, Meal, Workouts, Progress
 `POST /chat` · `GET /chat/history` · `GET /chat/actions` · `POST /chat/actions/{id}/confirm` · `/reject`
 
 ## Tests
-`pytest` runs 105 tests. They include a simulated user with a known TDEE and noisy weigh-ins,
+`pytest` runs 107 tests. They include a simulated user with a known TDEE and noisy weigh-ins,
 checking that the algorithm recovers the TDEE for daily, weekly and monthly weigh-ins, plus
 end-to-end API tests and agent tests with a fake LLM.
