@@ -74,6 +74,15 @@ the hour of resting burn during a workout would be counted twice.
 combinations. ILP finds the best combination under all constraints at once. The problem is
 knapsack-like (NP-hard in general), but with 20-50 foods CBC solves it in milliseconds.
 
+**"Give me a different suggestion" uses no-good cuts.** Each earlier suggestion used a set of foods S.
+The constraint `sum(used[f] for f in S) <= |S| - 1` forbids exactly that combination, so the solver
+returns the next-best one. It's the standard way to enumerate alternative ILP solutions. When nothing is
+left, the problem becomes infeasible and the app says "no more different combinations".
+
+**"Fit my meal" (`fit_meal`) reuses the same model.** The user picks the foods and the solver picks only the
+amounts. Every chosen food must be used, there are no pantry or meal-structure limits, and the amounts go in
+**half servings**: integer variables count units of 0.5, which is more precise and still an ILP.
+
 ### `insights.py` - pattern detection
 Simple statistics: weekend vs weekday eating, hitting the protein target on training days vs
 rest days, and weekly workout streaks. An insight is reported only when there is **enough
@@ -209,6 +218,14 @@ src/pages/      Onboarding, Today, Chat, Meal, Workouts, Progress
   several top-level folders in a flat layout), and the food database lived outside the package, so an
   installed app couldn't find it. Both are fixed in `pyproject.toml`.
 
+## Editing and corrections
+- **Editing a logged food:** a new amount scales the stored values (2 eggs to 3 eggs is x1.5). Values the user
+  types, for example from a package label, override that. Editing a workout recomputes its calories with the
+  same MET formula used for logging.
+- **Fixing the profile:** a corrected weight replaces the **sign-up** weigh-in if it's still the only one
+  (a typo like 87 instead of 78), and is otherwise logged as today's weight. Until the TDEE has been learned from
+  data, a corrected sex, age, height, activity level or weight also recomputes the formula TDEE.
+
 ## Database design decisions
 - **Nutrition snapshots.** A log entry copies the food's values at logging time. Fixing a food in
   the database later doesn't silently rewrite the user's history.
@@ -225,6 +242,6 @@ src/pages/      Onboarding, Today, Chat, Meal, Workouts, Progress
 `POST /chat` · `GET /chat/history` · `GET /chat/actions` · `POST /chat/actions/{id}/confirm` · `/reject`
 
 ## Tests
-`pytest` runs 107 tests. They include a simulated user with a known TDEE and noisy weigh-ins,
+`pytest` runs 118 tests. They include a simulated user with a known TDEE and noisy weigh-ins,
 checking that the algorithm recovers the TDEE for daily, weekly and monthly weigh-ins, plus
 end-to-end API tests and agent tests with a fake LLM.

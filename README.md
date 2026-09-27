@@ -30,7 +30,7 @@ The LLM turns free text into calls to tested code. It never makes up a number.
 | | What | How |
 |---|---|---|
 | 🧠 | **Adaptive TDEE**: learns how many calories *you* actually burn | Energy balance + least-squares slope of the weight trend, damped and capped; works with daily, weekly or monthly weigh-ins |
-| 🍽️ | **"What should I eat?"** from what's at home | **Integer Linear Programming** (PuLP/CBC): servings × foods, pantry limits, sensible-meal constraints, weighted macro deviation |
+| 🍽️ | **"What should I eat?"** from what's at home, plus **"fit my meal"** amounts | **Integer Linear Programming** (PuLP/CBC): pantry limits, sensible-meal constraints, weighted macro deviation; **no-good cuts** for alternative suggestions |
 | 💬 | **AI coach**: "I ate 2 eggs and ran for 30 minutes" | Tool-use agent with a hand-written loop; **proposes** entries, and the user **confirms** before anything is saved |
 | 🔌 | **Any LLM**: Gemini (free), Claude, or any OpenAI-style API | Provider adapters; model fallback and a circuit breaker for free-tier quotas and overloads |
 | 📈 | **Weight trend** without the daily water noise | Time-aware EWMA (alpha depends on the gap between weigh-ins) |
@@ -58,7 +58,7 @@ flowchart LR
 Design decisions, trade-offs and the bugs found along the way are in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ## Stack
-**Backend:** Python 3.11, FastAPI, SQLAlchemy 2, PuLP, Gemini (OpenAI-compatible API) / Anthropic SDK, PyJWT, pytest (107 tests)
+**Backend:** Python 3.11, FastAPI, SQLAlchemy 2, PuLP, Gemini (OpenAI-compatible API) / Anthropic SDK, PyJWT, pytest (118 tests)
 **Frontend:** React 19, TypeScript, Vite, Recharts, a PWA manifest, dark mode
 **Ops:** Docker (multi-stage, non-root), docker-compose with PostgreSQL, GitHub Actions (tests on SQLite *and* PostgreSQL, lint, build, Docker smoke test), Render blueprint
 
@@ -68,7 +68,7 @@ Design decisions, trade-offs and the bugs found along the way are in **[docs/ARC
 # Backend
 python -m venv .venv
 .venv/Scripts/pip install -e ".[dev]"
-.venv/Scripts/python -m pytest                     # 107 tests
+.venv/Scripts/python -m pytest                     # 118 tests
 .venv/Scripts/python -m scripts.seed_demo           # optional: demo account with 5 weeks of data
 .venv/Scripts/uvicorn fitflow.api.main:app          # API + interactive docs at http://localhost:8000/docs
 

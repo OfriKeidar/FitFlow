@@ -12,13 +12,17 @@ Constraints ("a meal that makes sense")
 Objective
     minimize the (normalized) distance from the macros the user still needs,
     where missing protein and exceeding calories are penalized the most.
+
+Two uses of the same model:
+    suggest_meal  the solver picks the foods (from the pantry) and the amounts
+    fit_meal      the user picks the foods ("I'm thinking of...") and the solver picks the amounts
 """
 
 from dataclasses import dataclass
 
 import pulp
 
-from fitflow.domain.models import FoodCategory, Macros, Meal, PantryItem, ZERO_MACROS
+from fitflow.domain.models import Food, FoodCategory, Macros, Meal, PantryItem, ZERO_MACROS
 
 MAX_ITEMS = 4
 MAX_PER_CATEGORY = 2
@@ -63,7 +67,7 @@ def meal_target(remaining: Macros, daily_target: Macros, meal: Meal) -> Macros:
 
 @dataclass(frozen=True)
 class MealSuggestion:
-    items: list[tuple[PantryItem, int]]  # (pantry item, servings)
+    items: list[tuple[PantryItem, float]]  # (pantry item, servings)
     totals: Macros
 
 
@@ -72,31 +76,70 @@ def suggest_meal(
     target: Macros,
     meal: Meal,
     disliked: frozenset[str] = frozenset(),
+    exclude: list[frozenset[str]] = (),
 ) -> MealSuggestion:
+    """The best meal from what's at home.
+
+    `exclude`: food combinations already suggested - "give me a different suggestion" adds the
+    current one here, and the solver must find the next-best combination.
+    """
     candidates = [
         p for p in pantry
         if meal in p.food.meals and p.food.name not in disliked and p.max_servings > 0
     ]
     if not candidates or target.kcal <= 0:
         return MealSuggestion([], ZERO_MACROS)
+    return _solve(candidates, target, step=1.0, must_use_all=False, exclude=exclude)
 
+
+FIT_MAX_SERVINGS = 6  # upper bound per food when fitting the user's own meal idea
+FIT_STEP = 0.5        # half servings: more precise amounts (e.g. 150 g instead of 100 or 200)
+
+
+def fit_meal(foods: list[Food], target: Macros) -> MealSuggestion:
+    """"I'm thinking of eating chicken, rice and salad" -> how much of each fits what I have left.
+
+    Same model as suggest_meal, but every chosen food must be in the meal (at least half a serving),
+    and there are no pantry limits or meal-structure rules - the user already decided what to eat.
+    """
+    if not foods or target.kcal <= 0:
+        return MealSuggestion([], ZERO_MACROS)
+    candidates = [PantryItem(food, FIT_MAX_SERVINGS) for food in foods]
+    return _solve(candidates, target, step=FIT_STEP, must_use_all=True, exclude=())
+
+
+def _solve(
+    candidates: list[PantryItem], target: Macros, step: float, must_use_all: bool,
+    exclude: list[frozenset[str]],
+) -> MealSuggestion:
     prob = pulp.LpProblem("meal", pulp.LpMinimize)
-    servings = {
-        i: prob.add_variable(f"servings_{i}", 0, p.max_servings, cat="Integer")
+    # units[i] = how many `step`-sized portions of food i (e.g. step 0.5 -> 3 units = 1.5 servings)
+    units = {
+        i: prob.add_variable(f"units_{i}", 0, round(p.max_servings / step), cat="Integer")
         for i, p in enumerate(candidates)
     }
-    used = {i: prob.add_variable(f"used_{i}", cat="Binary") for i in servings}
+    used = {i: prob.add_variable(f"used_{i}", cat="Binary") for i in units}
 
-    # Link the two variables: servings > 0  <=>  used = 1
+    # Link the two variables: units > 0  <=>  used = 1
     for i, p in enumerate(candidates):
-        prob += servings[i] <= p.max_servings * used[i]
-        prob += servings[i] >= used[i]
+        prob += units[i] <= round(p.max_servings / step) * used[i]
+        prob += units[i] >= used[i]
+        if must_use_all:
+            prob += used[i] == 1
 
-    prob += pulp.lpSum(used.values()) <= MAX_ITEMS
-    for category in FoodCategory:
-        in_category = [used[i] for i, p in enumerate(candidates) if p.food.category == category]
-        if in_category:
-            prob += pulp.lpSum(in_category) <= MAX_PER_CATEGORY
+    if not must_use_all:
+        prob += pulp.lpSum(used.values()) <= MAX_ITEMS
+        for category in FoodCategory:
+            in_category = [used[i] for i, p in enumerate(candidates) if p.food.category == category]
+            if in_category:
+                prob += pulp.lpSum(in_category) <= MAX_PER_CATEGORY
+
+    # "No-good cuts": forbid each combination suggested before. If a previous meal used foods S,
+    # at most |S| - 1 of them may be used together now, so the solver must change the combination.
+    for combination in exclude:
+        members = [used[i] for i, p in enumerate(candidates) if p.food.name in combination]
+        if len(members) == len(combination):  # all still available
+            prob += pulp.lpSum(members) <= len(members) - 1
 
     # Deviation from target, split into "under" and "over" (the standard trick to model |x| in LP)
     objective = []
@@ -104,16 +147,18 @@ def suggest_meal(
         goal = getattr(target, macro)
         if goal <= 0:
             continue
-        total = pulp.lpSum(getattr(p.food.per_serving, macro) * servings[i] for i, p in enumerate(candidates))
+        total = pulp.lpSum(getattr(p.food.per_serving, macro) * step * units[i] for i, p in enumerate(candidates))
         under = prob.add_variable(f"under_{macro}", 0)
         over = prob.add_variable(f"over_{macro}", 0)
         prob += total + under - over == goal
         objective += [w_under * under / goal, w_over * over / goal]
 
     prob += pulp.lpSum(objective) + PER_ITEM_PENALTY * pulp.lpSum(used.values())
-    prob.solve(pulp.PULP_CBC_CMD(msg=False))
+    status = prob.solve(pulp.PULP_CBC_CMD(msg=False))
+    if pulp.LpStatus[status] != "Optimal":
+        return MealSuggestion([], ZERO_MACROS)  # e.g. every combination was already suggested
 
-    chosen = {i: round(servings[i].value() or 0) for i in servings}
+    chosen = {i: round(units[i].value() or 0) * step for i in units}
     items = [(p, chosen[i]) for i, p in enumerate(candidates) if chosen[i] > 0]
     totals = sum((p.food.per_serving.scale(n) for p, n in items), ZERO_MACROS)
     return MealSuggestion(items, totals)

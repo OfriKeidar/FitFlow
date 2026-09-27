@@ -71,7 +71,12 @@ class LoginIn(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    """Every profile field can be fixed after sign-up (typos happen)."""
     name: str | None = Field(default=None, min_length=1, max_length=40)
+    sex: Sex | None = None
+    age: int | None = Field(default=None, ge=14, le=100)
+    height_cm: float | None = Field(default=None, ge=120, le=230)
+    weight_kg: float | None = Field(default=None, ge=35, le=300)  # the current weight (today's weigh-in)
     goal: GoalName | None = None
     target_weight_kg: float | None = Field(default=None, ge=35, le=300)
     pace: PaceName | None = None
@@ -147,6 +152,22 @@ class CustomFoodLogIn(BaseModel):
     day: date | None = None
 
 
+class FoodLogUpdate(BaseModel):
+    """Fix a logged entry. Changing only `servings` scales the nutrition values; values sent
+    explicitly (e.g. from the package label) are used as-is."""
+    description: str | None = Field(default=None, min_length=1, max_length=200)
+    servings: float | None = Field(default=None, gt=0, le=20)
+    kcal: float | None = Field(default=None, ge=0, le=5000)
+    protein_g: float | None = Field(default=None, ge=0, le=500)
+    carbs_g: float | None = Field(default=None, ge=0, le=1000)
+    fat_g: float | None = Field(default=None, ge=0, le=500)
+
+
+class WorkoutUpdate(BaseModel):
+    activity: str | None = None
+    minutes: float | None = Field(default=None, gt=0, le=600)
+
+
 class FoodLogOut(ORM):
     id: int
     day: date
@@ -206,7 +227,13 @@ class SuggestedItem(BaseModel):
     food_id: int
     food: str
     serving: str
-    servings: int
+    servings: float  # "fit my meal" works in half servings
+
+
+class FitMealIn(BaseModel):
+    """"I'm thinking of eating these" - the optimizer picks the amounts."""
+    food_ids: list[int] = Field(min_length=1, max_length=6)
+    hour: int | None = Field(default=None, ge=0, le=23)
 
 
 class MealSuggestionOut(BaseModel):

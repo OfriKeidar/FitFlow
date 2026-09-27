@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CartesianGrid, ComposedChart, Line, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis, ZAxis } from 'recharts'
-import { api, errorMessage, logout } from '../api/client'
+import { Link } from 'react-router-dom'
+import { api, errorMessage } from '../api/client'
 import type { Progress as ProgressData } from '../api/types'
 import { Icon } from '../components/Icon'
 import { useApi } from '../hooks/useApi'
@@ -27,9 +28,9 @@ export function Progress() {
           </p>
         </div>
       )}
-      <button className="btn" onClick={logout}>
-        <Icon name="logout" size={16} /> התנתקות
-      </button>
+      <Link to="/profile" className="btn" style={{ textDecoration: 'none', textAlign: 'center' }}>
+        <Icon name="user" size={16} /> עריכת פרופיל ויעדים
+      </Link>
     </>
   )
 }

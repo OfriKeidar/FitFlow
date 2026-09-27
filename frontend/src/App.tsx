@@ -8,6 +8,7 @@ import { Chat } from './pages/Chat'
 import { Login } from './pages/Login'
 import { Meal } from './pages/Meal'
 import { Onboarding } from './pages/Onboarding'
+import { Profile } from './pages/Profile'
 import { Today } from './pages/Today'
 import { Workouts } from './pages/Workouts'
 import { UserContext } from './user'
@@ -60,13 +61,14 @@ export default function App() {
       {screen === 'login' && <Login onDone={loggedIn} onRegister={() => setScreen('onboarding')} />}
       {screen === 'onboarding' && <Onboarding onDone={loggedIn} onLogin={() => setScreen('login')} />}
       {screen === 'ready' && user && (
-        <UserContext.Provider value={user}>
+        <UserContext.Provider value={{ user, setUser }}>
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Today />} />
               <Route path="/log" element={<Chat />} />
               <Route path="/meal" element={<Meal />} />
               <Route path="/workouts" element={<Workouts />} />
+              <Route path="/profile" element={<Profile />} />
               <Route path="/progress" element={<Suspense fallback={<Loader />}><Progress /></Suspense>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

@@ -6,6 +6,7 @@ from fitflow.api.deps import DB, CurrentUser, Today
 from fitflow.api.schemas import (
     GoalName, PaceName, PlanOut, UserOut, UserUpdate, check_target,
 )
+from fitflow.domain.energy import initial_tdee
 from fitflow.domain.models import ActivityLevel, Goal, Pace, Profile, Sex
 from fitflow.services import coach, tracking
 
@@ -18,18 +19,28 @@ def get_me(user: CurrentUser):
 
 
 @router.patch("/me", response_model=UserOut)
-def update_me(body: UserUpdate, user: CurrentUser, db: DB):
+def update_me(body: UserUpdate, user: CurrentUser, db: DB, today: Today):
     changes = body.model_dump(exclude_unset=True)
+    new_weight = changes.pop("weight_kg", None)
     goal = changes.get("goal", user.goal)
     target = changes.get("target_weight_kg", user.target_weight_kg)
     if goal == "maintain":
         changes["target_weight_kg"] = target = None
     try:
-        check_target(goal, tracking.current_weight(db, user), target)
+        check_target(goal, new_weight or tracking.current_weight(db, user), target)
     except ValueError as e:
         raise HTTPException(422, str(e))
+
     for field, value in changes.items():
         setattr(user, field, value)
+    if new_weight is not None:
+        tracking.correct_weight(db, user, new_weight, today)
+
+    # Until the TDEE has been learned from real data, it comes from the formula - so a corrected
+    # sex, age, height, activity level or weight must change it too.
+    affects_formula = bool(changes.keys() & {"sex", "age", "height_cm", "activity"}) or new_weight is not None
+    if affects_formula and user.tdee_previous is None:
+        user.tdee = initial_tdee(tracking.profile_of(db, user))
     db.commit()
     return user
 

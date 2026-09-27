@@ -1,12 +1,12 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/client'
-import type { DailyStatus, Goal } from '../api/types'
+import { api, errorMessage } from '../api/client'
+import type { DailyStatus, FoodLogEntry, Goal, Workout } from '../api/types'
 import { Icon, type IconName } from '../components/Icon'
 import { Ring } from '../components/Ring'
 import { useApi } from '../hooks/useApi'
 import { useCountUp } from '../hooks/useCountUp'
-import { GOAL_LABELS, activityName, formatDate, greeting, weekdayName } from '../labels'
+import { ACTIVITY_NAMES, GOAL_LABELS, activityName, formatDate, fullDate, greeting } from '../labels'
 import { useUser } from '../user'
 
 export function Today() {
@@ -41,12 +41,17 @@ function Greeting({ day }: { day: string }) {
   const user = useUser()
   const hello = greeting()
   return (
-    <div className="page-header fade-in">
-      <div className="row" style={{ gap: 8 }}>
-        <span className="greeting-icon"><Icon name={hello.icon} size={26} /></span>
-        <h1>{hello.text}, {user.name}</h1>
+    <div className="row fade-in" style={{ alignItems: 'flex-start' }}>
+      <div className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
+        <span className="greeting-icon" style={{ marginTop: 2 }}><Icon name={hello.icon} size={26} /></span>
+        <div>
+          <h1>{hello.text}, {user.name}</h1>
+          <p className="muted">{fullDate(day)}</p>
+        </div>
       </div>
-      <span className="muted">{weekdayName(day)}</span>
+      <Link to="/profile" className="btn icon" aria-label="הפרופיל שלי" style={{ color: 'var(--text-2)' }}>
+        <Icon name="user" size={24} />
+      </Link>
     </div>
   )
 }
@@ -174,52 +179,162 @@ function Section(props: { title: string; icon: IconName; addLabel: string; child
 }
 
 function Meals({ status, onChange }: { status: DailyStatus; onChange: () => void }) {
-  async function remove(id: number) {
-    await api.deleteFood(id)
-    onChange()
-  }
+  const [editing, setEditing] = useState<number | null>(null)
   return (
     <Section title="מה אכלתי היום" icon="kitchen" addLabel="הוספת אוכל">
       {status.entries.length === 0 && (
         <p className="muted">עוד לא רשמת אוכל היום. לחץ על "הוספת אוכל" וכתוב בחופשיות מה אכלת.</p>
       )}
-      {status.entries.map((e) => (
-        <div key={e.id} className="row" style={{ padding: '4px 0', borderBottom: '0.5px solid var(--border)' }}>
-          <span>{e.servings !== 1 ? `${e.servings} × ` : ''}{e.description}</span>
-          <span className="row muted" style={{ gap: 4 }}>
-            {Math.round(e.kcal)} קק"ל · {Math.round(e.protein_g)} ח'
-            <button className="btn icon" onClick={() => remove(e.id)} aria-label={`מחיקת ${e.description}`}>
-              <Icon name="trash" size={16} />
-            </button>
-          </span>
-        </div>
-      ))}
+      {status.entries.length > 0 && <p className="muted" style={{ fontSize: 12 }}>לחיצה על פריט פותחת עריכה</p>}
+      {status.entries.map((e) =>
+        editing === e.id ? (
+          <EditFood key={e.id} entry={e} onDone={() => { setEditing(null); onChange() }} />
+        ) : (
+          <button key={e.id} className="row entry-row" onClick={() => setEditing(e.id)}>
+            <span>{e.servings !== 1 ? `${e.servings} × ` : ''}{e.description}</span>
+            <span className="muted">{Math.round(e.kcal)} קק"ל · {Math.round(e.protein_g)} ח'</span>
+          </button>
+        ),
+      )}
     </Section>
   )
 }
 
-function TodaysWorkouts({ status, onChange }: { status: DailyStatus; onChange: () => void }) {
-  async function remove(id: number) {
-    await api.deleteWorkout(id)
-    onChange()
+/** Fix a logged food: change the amount (values scale with it) or type exact values from the label. */
+function EditFood({ entry, onDone }: { entry: FoodLogEntry; onDone: () => void }) {
+  const [form, setForm] = useState({
+    servings: entry.servings, kcal: round1(entry.kcal), protein_g: round1(entry.protein_g),
+    carbs_g: round1(entry.carbs_g), fat_g: round1(entry.fat_g),
+  })
+  const [touchedValues, setTouchedValues] = useState(false) // did the user type exact values?
+  const [error, setError] = useState<string | null>(null)
+
+  // Changing the amount rescales the values on screen too, so the user sees the effect right away.
+  function setServings(servings: number) {
+    const factor = entry.servings > 0 && servings > 0 ? servings / entry.servings : 1
+    setForm({
+      servings, kcal: round1(entry.kcal * factor), protein_g: round1(entry.protein_g * factor),
+      carbs_g: round1(entry.carbs_g * factor), fat_g: round1(entry.fat_g * factor),
+    })
   }
+
+  async function save() {
+    if (!(form.servings > 0)) return setError('הכמות צריכה להיות גדולה מאפס')
+    try {
+      // Send exact values only if the user typed them; otherwise the server scales by servings.
+      await api.updateFood(entry.id, touchedValues ? form : { servings: form.servings })
+      onDone()
+    } catch (e) {
+      setError(errorMessage(e))
+    }
+  }
+
+  async function remove() {
+    await api.deleteFood(entry.id)
+    onDone()
+  }
+
+  const field = (key: 'kcal' | 'protein_g' | 'carbs_g' | 'fat_g', label: string) => (
+    <label className="field">
+      {label}
+      <input className="input" type="number" inputMode="decimal" value={Number.isNaN(form[key]) ? '' : form[key]}
+             onChange={(e) => { setForm({ ...form, [key]: e.target.valueAsNumber }); setTouchedValues(true); setError(null) }} />
+    </label>
+  )
+
+  return (
+    <div className="tile stack pop" style={{ margin: '4px 0' }}>
+      <strong style={{ fontWeight: 500 }}>{entry.description}</strong>
+      <label className="field">
+        כמות (מנות)
+        <input className="input" type="number" inputMode="decimal" step={0.5} value={Number.isNaN(form.servings) ? '' : form.servings}
+               onChange={(e) => { setServings(e.target.valueAsNumber); setTouchedValues(false); setError(null) }} />
+      </label>
+      <div className="grid-2">
+        {field('kcal', 'קלוריות')}
+        {field('protein_g', "חלבון (גר')")}
+        {field('carbs_g', "פחמימות (גר')")}
+        {field('fat_g', "שומן (גר')")}
+      </div>
+      {error && <p className="error-text">{error}</p>}
+      <div className="row">
+        <span className="row" style={{ gap: 6 }}>
+          <button className="btn primary small" onClick={save}>שמירה</button>
+          <button className="btn small" onClick={onDone}>ביטול</button>
+        </span>
+        <button className="btn small" style={{ color: 'var(--danger)' }} onClick={remove}>
+          <Icon name="trash" size={14} /> מחיקה
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function TodaysWorkouts({ status, onChange }: { status: DailyStatus; onChange: () => void }) {
+  const [editing, setEditing] = useState<number | null>(null)
   return (
     <Section title="האימונים שלי היום" icon="barbell" addLabel="הוספת אימון">
       {status.workouts.length === 0 && <p className="muted">עוד לא נרשם אימון היום.</p>}
-      {status.workouts.map((w) => (
-        <div key={w.id} className="row" style={{ padding: '4px 0' }}>
-          <span><Icon name="run" size={16} /> {activityName(w.activity)} · {w.minutes} דק'</span>
-          <span className="row" style={{ gap: 4, color: 'var(--accent)' }}>
-            +{Math.round(w.kcal)} קק"ל
-            <button className="btn icon" onClick={() => remove(w.id)} aria-label="מחיקת אימון">
-              <Icon name="trash" size={16} />
-            </button>
-          </span>
-        </div>
-      ))}
+      {status.workouts.map((w) =>
+        editing === w.id ? (
+          <EditWorkout key={w.id} workout={w} onDone={() => { setEditing(null); onChange() }} />
+        ) : (
+          <button key={w.id} className="row entry-row" onClick={() => setEditing(w.id)}>
+            <span><Icon name="run" size={16} /> {activityName(w.activity)} · {w.minutes} דק'</span>
+            <span style={{ color: 'var(--accent)' }}>+{Math.round(w.kcal)} קק"ל</span>
+          </button>
+        ),
+      )}
     </Section>
   )
 }
+
+/** Fix a logged workout; calories burned are recomputed by the server with the same formula. */
+function EditWorkout({ workout, onDone }: { workout: Workout; onDone: () => void }) {
+  const [activity, setActivity] = useState(workout.activity)
+  const [minutes, setMinutes] = useState(workout.minutes)
+  const [error, setError] = useState<string | null>(null)
+
+  async function save() {
+    if (!(minutes > 0 && minutes <= 600)) return setError('משך האימון צריך להיות בין 1 ל־600 דקות')
+    try {
+      await api.updateWorkout(workout.id, { activity, minutes })
+      onDone()
+    } catch (e) {
+      setError(errorMessage(e))
+    }
+  }
+
+  async function remove() {
+    await api.deleteWorkout(workout.id)
+    onDone()
+  }
+
+  return (
+    <div className="tile stack pop" style={{ margin: '4px 0' }}>
+      <div className="row">
+        <select className="input" value={activity} onChange={(e) => setActivity(e.target.value)} aria-label="סוג אימון">
+          {Object.entries(ACTIVITY_NAMES).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+        </select>
+        <input className="input" type="number" style={{ width: 90 }} value={Number.isNaN(minutes) ? '' : minutes}
+               onChange={(e) => { setMinutes(e.target.valueAsNumber); setError(null) }} aria-label="דקות" />
+        <span className="muted">דק'</span>
+      </div>
+      {error && <p className="error-text">{error}</p>}
+      <div className="row">
+        <span className="row" style={{ gap: 6 }}>
+          <button className="btn primary small" onClick={save}>שמירה</button>
+          <button className="btn small" onClick={onDone}>ביטול</button>
+        </span>
+        <button className="btn small" style={{ color: 'var(--danger)' }} onClick={remove}>
+          <Icon name="trash" size={14} /> מחיקה
+        </button>
+      </div>
+    </div>
+  )
+}
+
+const round1 = (x: number) => Math.round(x * 10) / 10
 
 /** Placeholder shapes while the first load is in flight - better than a blank screen. */
 function TodaySkeleton() {

@@ -75,3 +75,27 @@ def test_meal_target_is_capped_to_a_reasonable_plate():
     dinner = meal_target(daily, daily, Meal.DINNER)  # nothing eaten all day
     assert dinner.kcal == 2000 * MAX_MEAL_SHARE
     assert dinner.protein_g == 150 * MAX_MEAL_SHARE  # all macros shrink together
+
+
+def test_different_suggestion_changes_the_combination():
+    from fitflow.domain.optimizer import suggest_meal
+    target = Macros(600, 50, 50, 15)
+    first = suggest_meal(PANTRY, target, Meal.DINNER)
+    second = suggest_meal(PANTRY, target, Meal.DINNER, exclude=[frozenset(names(first))])
+    assert second.items and names(second) != names(first)
+
+
+def test_no_more_alternatives_returns_empty():
+    from fitflow.domain.optimizer import suggest_meal
+    pantry = [PantryItem(CHICKEN, 3)]  # only one possible combination
+    first = suggest_meal(pantry, Macros(600, 50, 50, 15), Meal.DINNER)
+    assert suggest_meal(pantry, Macros(600, 50, 50, 15), Meal.DINNER, exclude=[frozenset(names(first))]).items == []
+
+
+def test_fit_meal_uses_every_chosen_food_in_half_servings():
+    from fitflow.domain.optimizer import fit_meal
+    result = fit_meal([CHICKEN, RICE, SALAD], Macros(600, 50, 60, 15))
+    assert names(result) == {"chicken breast", "white rice", "vegetable salad"}
+    assert all((n * 2).is_integer() for _, n in result.items)       # multiples of 0.5
+    assert result.totals.protein_g >= 45            # enough protein (extra protein is fine by design)
+    assert abs(result.totals.kcal - 600) < 60       # calories on target

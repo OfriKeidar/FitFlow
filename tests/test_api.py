@@ -134,3 +134,58 @@ def test_workout_stats(client, user):
     stats = client.get("/workouts/stats", headers=user).json()
     assert stats["total_workouts"] == 1 and stats["days_since_last"] == 0
     assert stats["favorite_activity"] == "running"
+
+
+def test_edit_food_servings_scales_values(client, user):
+    entry = client.post("/log/food", headers=user, json={"food_id": food_id(client, "ביצה"), "servings": 2}).json()
+    edited = client.patch(f"/log/food/{entry['id']}", headers=user, json={"servings": 3}).json()
+    assert edited["servings"] == 3 and edited["kcal"] == pytest.approx(216)  # 72 per egg
+
+
+def test_edit_food_with_exact_values(client, user):
+    entry = client.post("/log/custom-food", headers=user, json={"description": "שניצל", "kcal": 300}).json()
+    edited = client.patch(f"/log/food/{entry['id']}", headers=user, json={"kcal": 420, "protein_g": 30}).json()
+    assert edited["kcal"] == 420 and edited["protein_g"] == 30
+    assert client.get("/today", headers=user).json()["eaten"]["kcal"] == 420
+
+
+def test_edit_workout_recomputes_calories(client, user):
+    w = client.post("/log/workout", headers=user, json={"activity": "running", "minutes": 30}).json()
+    edited = client.patch(f"/log/workout/{w['id']}", headers=user, json={"minutes": 60}).json()
+    assert edited["kcal"] == pytest.approx(2 * w["kcal"])
+
+
+def test_cannot_edit_someone_elses_entry(client, user):
+    entry = client.post("/log/custom-food", headers=user, json={"description": "x", "kcal": 100}).json()
+    other = register(client, email="other@example.com")
+    assert client.patch(f"/log/food/{entry['id']}", headers=other, json={"kcal": 1}).status_code == 404
+
+
+def test_fixing_the_signup_weight(client, user):
+    """Typed 87 instead of 78 at sign-up: fixing it changes the start weight and the TDEE."""
+    before = client.get("/me", headers=user).json()["tdee"]
+    me = client.patch("/me", headers=user, json={"weight_kg": 78, "target_weight_kg": 72}).json()
+    progress = client.get("/progress", headers=user).json()
+    assert progress["start_weight_kg"] == 78 and [w["weight_kg"] for w in progress["weigh_ins"]] == [78]
+    assert me["tdee"] < before  # a lighter body burns less
+
+
+def test_editing_profile_details(client, user):
+    me = client.patch("/me", headers=user, json={"height_cm": 175, "age": 30, "sex": "female"}).json()
+    assert (me["height_cm"], me["age"], me["sex"]) == (175, 30, "female")
+
+
+def test_different_meal_suggestion(client, user):
+    for name in ("חזה עוף", "טונה במים", "אורז לבן", "בטטה", "סלט ירקות"):
+        client.put(f"/pantry/{food_id(client, name)}", headers=user, json={"max_servings": 2})
+    first = client.get("/coach/meal-suggestion", headers=user, params={"hour": 20}).json()
+    ids = ",".join(str(i["food_id"]) for i in first["items"])
+    second = client.get("/coach/meal-suggestion", headers=user, params={"hour": 20, "exclude": ids}).json()
+    assert second["items"] and {i["food"] for i in second["items"]} != {i["food"] for i in first["items"]}
+
+
+def test_fit_my_meal(client, user):
+    ids = [food_id(client, "חזה עוף"), food_id(client, "אורז לבן")]
+    r = client.post("/coach/fit-meal", headers=user, json={"food_ids": ids, "hour": 20}).json()
+    assert {i["food"] for i in r["items"]} == {"חזה עוף", "אורז לבן"}
+    assert r["totals"]["protein_g"] > 0.7 * r["meal_target"]["protein_g"]

@@ -67,3 +67,9 @@ export function formatDate(isoDay: string): string {
 export function weekdayName(isoDay: string): string {
   return new Date(isoDay + 'T12:00:00').toLocaleDateString('he-IL', { weekday: 'long' })
 }
+
+/** "2026-09-27" -> "יום ראשון 27/09/2026" */
+export function fullDate(isoDay: string): string {
+  const [year, month, day] = isoDay.split('-')
+  return `${weekdayName(isoDay)} ${day}/${month}/${year}`
+}

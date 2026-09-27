@@ -118,6 +118,19 @@ export interface WeightPoint {
   weight_kg: number
 }
 
+export interface FoodLogUpdate {
+  description?: string
+  servings?: number
+  kcal?: number
+  protein_g?: number
+  carbs_g?: number
+  fat_g?: number
+}
+
+export interface UserUpdate extends Partial<Omit<UserCreate, 'target_weight_kg'>> {
+  target_weight_kg?: number | null
+}
+
 export interface Plan {
   weekly_rate_kg: number
   weeks_to_target: number | null

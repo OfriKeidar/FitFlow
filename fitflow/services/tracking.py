@@ -66,6 +66,34 @@ def log_workout(session: Session, user: db.User, activity: str, minutes: float, 
     return entry
 
 
+MACRO_FIELDS = ("kcal", "protein_g", "carbs_g", "fat_g")
+
+
+def update_food_entry(session: Session, entry: db.FoodLogEntry, changes: dict) -> db.FoodLogEntry:
+    """Fix a logged food. New servings scale the values proportionally (2 eggs -> 3 eggs = x1.5),
+    unless the user also typed exact values, which then win."""
+    if "servings" in changes and entry.servings > 0:
+        factor = changes["servings"] / entry.servings
+        for field in MACRO_FIELDS:
+            if field not in changes:
+                setattr(entry, field, getattr(entry, field) * factor)
+    for field, value in changes.items():
+        setattr(entry, field, value)
+    session.commit()
+    return entry
+
+
+def update_workout(session: Session, user: db.User, entry: db.WorkoutEntry, activity: str | None,
+                   minutes: float | None) -> db.WorkoutEntry:
+    """Fix a logged workout; calories burned are recomputed with the same formula as logging."""
+    entry.activity = activity or entry.activity
+    entry.minutes = minutes or entry.minutes
+    entry.category = get_activity(entry.activity).category.value
+    entry.kcal = workout_kcal(entry.activity, entry.minutes, current_weight(session, user))
+    session.commit()
+    return entry
+
+
 def log_weight(session: Session, user: db.User, weight_kg: float, day: date) -> db.WeighInEntry:
     """One weigh-in per day: logging again on the same day replaces the value."""
     entry = session.scalar(
@@ -78,6 +106,22 @@ def log_weight(session: Session, user: db.User, weight_kg: float, day: date) -> 
         entry.weight_kg = weight_kg
     session.commit()
     return entry
+
+
+def correct_weight(session: Session, user: db.User, weight_kg: float, today: date) -> None:
+    """The user edited their weight in the profile.
+
+    If the only weigh-in is the one from sign-up, the sign-up weight itself was the mistake (e.g. 87
+    typed instead of 78): fix it, and the starting point of the progress chart with it. Otherwise
+    it's simply today's weight.
+    """
+    weigh_ins = list(session.scalars(select(db.WeighInEntry).where(db.WeighInEntry.user_id == user.id)))
+    if len(weigh_ins) == 1:
+        weigh_ins[0].weight_kg = weight_kg
+        user.start_weight_kg = weight_kg
+        session.flush()
+    else:
+        log_weight(session, user, weight_kg, today)
 
 
 def food_entries(session: Session, user: db.User, day: date) -> list[db.FoodLogEntry]:

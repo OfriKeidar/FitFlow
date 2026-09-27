@@ -10,11 +10,11 @@ from sqlalchemy.orm import Session
 from fitflow.db import models as db
 from fitflow.domain.energy import daily_targets, weekly_rate_kg, weeks_to_target
 from fitflow.domain.insights import Insight, generate_insights, week_start, weekly_workout_counts
-from fitflow.domain.models import DaySummary, Macros, Profile, WeighIn, WorkoutCategory, ZERO_MACROS
-from fitflow.domain.optimizer import MealSuggestion, meal_for_hour, meal_target, suggest_meal
+from fitflow.domain.models import DaySummary, Macros, Meal, Profile, WeighIn, WorkoutCategory, ZERO_MACROS
+from fitflow.domain.optimizer import MealSuggestion, fit_meal, meal_for_hour, meal_target, suggest_meal
 from fitflow.domain.trend import TdeeUpdate, adaptive_tdee, weight_trend
 from fitflow.domain.workout_stats import WorkoutStats, workout_stats
-from fitflow.services.mappers import entry_macros, to_pantry_item, to_weigh_in, to_workout
+from fitflow.services.mappers import entry_macros, to_food, to_pantry_item, to_weigh_in, to_workout
 from fitflow.services.tracking import daily_status, profile_of, workout_entries
 
 UPDATE_EVERY_DAYS = 7
@@ -85,13 +85,25 @@ class MealPlan:
     suggestion: MealSuggestion
 
 
-def suggest_meal_now(session: Session, user: db.User, day: date, hour: int) -> MealPlan:
+def _meal_target_now(session: Session, user: db.User, day: date, hour: int) -> tuple[Macros, Meal]:
     status = daily_status(session, user, day)
     meal = meal_for_hour(hour)
-    target = meal_target(status.remaining, status.target, meal)
+    return meal_target(status.remaining, status.target, meal), meal
+
+
+def suggest_meal_now(
+    session: Session, user: db.User, day: date, hour: int, exclude: list[frozenset[str]] = (),
+) -> MealPlan:
+    target, meal = _meal_target_now(session, user, day, hour)
     pantry = [to_pantry_item(p) for p in user.pantry]
     disliked = frozenset(d.food.name for d in user.disliked)
-    return MealPlan(target, suggest_meal(pantry, target, meal, disliked))
+    return MealPlan(target, suggest_meal(pantry, target, meal, disliked, exclude))
+
+
+def fit_meal_now(session: Session, user: db.User, day: date, hour: int, foods: list[db.Food]) -> MealPlan:
+    """The user chose the foods; find the amounts that fit this meal's share of what's left today."""
+    target, _ = _meal_target_now(session, user, day, hour)
+    return MealPlan(target, fit_meal([to_food(f) for f in foods], target))
 
 
 def insights(session: Session, user: db.User, today: date) -> list[Insight]:

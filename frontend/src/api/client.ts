@@ -2,8 +2,9 @@
 // Components never build URLs or headers themselves; they call these functions.
 
 import type {
-  AuthResult, ChatHistoryItem, RegisterData, ChatReply, DailyStatus, Food, Goal, Insight, MealSuggestion, PantryItem, Pace,
-  PendingAction, Plan, Progress, User, Week, Workout, WorkoutStats,
+  AuthResult, ChatHistoryItem, ChatReply, DailyStatus, Food, FoodLogEntry, FoodLogUpdate, Goal, Insight,
+  MealSuggestion, Pace, PantryItem, PendingAction, Plan, Progress, RegisterData, User, UserUpdate, Week,
+  Workout, WorkoutStats,
 } from './types'
 
 const BASE = import.meta.env.VITE_API_URL ?? '/api' // dev: proxied to FastAPI by Vite (see vite.config.ts)
@@ -99,6 +100,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 const get = <T>(path: string) => request<T>('GET', path)
 const post = <T>(path: string, body?: unknown) => request<T>('POST', path, body)
 const put = <T>(path: string, body?: unknown) => request<T>('PUT', path, body)
+const patch = <T>(path: string, body?: unknown) => request<T>('PATCH', path, body)
 const del = (path: string) => request<void>('DELETE', path)
 
 // --- endpoints ---
@@ -107,14 +109,18 @@ export const api = {
   register: (data: RegisterData) => post<AuthResult>('/auth/register', data),
   login: (email: string, password: string) => post<AuthResult>('/auth/login', { email, password }),
   me: () => get<User>('/me'),
+  updateMe: (changes: UserUpdate) => patch<User>('/me', changes),
   planPreview: (goal: Goal, weightKg: number, targetKg: number, pace: Pace) =>
     get<Plan>(`/plan-preview?goal=${goal}&weight_kg=${weightKg}&target_weight_kg=${targetKg}&pace=${pace}`),
 
   today: () => get<DailyStatus>('/today'),
   deleteFood: (id: number) => del(`/log/food/${id}`),
+  updateFood: (id: number, changes: FoodLogUpdate) => patch<FoodLogEntry>(`/log/food/${id}`, changes),
   logFood: (foodId: number, servings: number) => post('/log/food', { food_id: foodId, servings }),
   logWorkout: (activity: string, minutes: number) => post<Workout>('/log/workout', { activity, minutes }),
   deleteWorkout: (id: number) => del(`/log/workout/${id}`),
+  updateWorkout: (id: number, changes: { activity?: string; minutes?: number }) =>
+    patch<Workout>(`/log/workout/${id}`, changes),
   logWeight: (weightKg: number) => post('/log/weight', { weight_kg: weightKg }),
   activities: () => get<Record<string, string>>('/log/activities'),
 
@@ -123,7 +129,12 @@ export const api = {
   setPantryItem: (foodId: number, maxServings: number) => put(`/pantry/${foodId}`, { max_servings: maxServings }),
   removePantryItem: (foodId: number) => del(`/pantry/${foodId}`),
 
-  mealSuggestion: () => get<MealSuggestion>(`/coach/meal-suggestion?hour=${new Date().getHours()}`),
+  // `exclude`: food-id lists of earlier suggestions, so "a different suggestion" finds a new combination.
+  mealSuggestion: (exclude: number[][] = []) =>
+    get<MealSuggestion>(
+      `/coach/meal-suggestion?hour=${new Date().getHours()}` + exclude.map((ids) => `&exclude=${ids.join(',')}`).join(''),
+    ),
+  fitMeal: (foodIds: number[]) => post<MealSuggestion>('/coach/fit-meal', { food_ids: foodIds, hour: new Date().getHours() }),
   insights: () => get<Insight[]>('/coach/insights'),
   week: () => get<Week>('/workouts/week'),
   workoutStats: () => get<WorkoutStats>('/workouts/stats'),
