@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fitflow.db import models as db
-from fitflow.domain.activity import get_activity, workout_kcal
+from fitflow.domain.activity import activity_for_health_type, get_activity, workout_kcal
 from fitflow.domain.energy import daily_targets, initial_tdee
 from fitflow.domain.models import Macros, Profile, ZERO_MACROS
 from fitflow.services.mappers import entry_macros, food_macros, to_profile
@@ -64,6 +64,43 @@ def log_workout(session: Session, user: db.User, activity: str, minutes: float, 
     session.add(entry)
     session.commit()
     return entry
+
+
+@dataclass(frozen=True)
+class SyncedWorkout:
+    """A workout read from the phone's health store (Health Connect)."""
+    external_id: str
+    workout_type: str
+    day: date
+    minutes: float
+    kcal: float | None  # active calories measured by the watch, if any
+
+
+def import_workouts(session: Session, user: db.User, workouts: list[SyncedWorkout]) -> tuple[int, int]:
+    """Save synced workouts, skipping ones already imported. Returns (imported, skipped).
+
+    Calories: a watch measures them from heart rate, which beats our MET estimate - so its value is
+    used when present. Without it, the same MET formula as manual logging.
+    """
+    known = set(session.scalars(
+        select(db.WorkoutEntry.external_id)
+        .where(db.WorkoutEntry.user_id == user.id, db.WorkoutEntry.external_id.is_not(None))
+    ))
+    imported = 0
+    weight = current_weight(session, user)
+    for w in workouts:
+        if w.external_id in known:
+            continue
+        activity = activity_for_health_type(w.workout_type)
+        kcal = w.kcal if w.kcal else workout_kcal(activity, w.minutes, weight)
+        session.add(db.WorkoutEntry(
+            user_id=user.id, day=w.day, activity=activity, category=get_activity(activity).category.value,
+            minutes=w.minutes, kcal=kcal, source="health_connect", external_id=w.external_id,
+        ))
+        known.add(w.external_id)  # also dedupes repeats inside the same batch
+        imported += 1
+    session.commit()
+    return imported, len(workouts) - imported
 
 
 MACRO_FIELDS = ("kcal", "protein_g", "carbs_g", "fat_g")

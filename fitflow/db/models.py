@@ -85,6 +85,10 @@ class WorkoutEntry(Base):
     category: Mapped[str] = mapped_column(String(20))
     minutes: Mapped[float]
     kcal: Mapped[float]
+    # Where it came from: "manual" (the app / chat) or "health_connect" (synced from the phone).
+    source: Mapped[str] = mapped_column(String(20), default="manual", server_default="manual")
+    # The workout's id in the source app. Unique per user, so syncing twice never logs it twice.
+    external_id: Mapped[str | None] = mapped_column(String(200), default=None)
 
 
 class WeighInEntry(Base):

@@ -28,7 +28,29 @@ ACTIVITIES = {
     "pilates": Activity(3.0, WorkoutCategory.OTHER),
     "football": Activity(7.0, WorkoutCategory.OTHER),
     "basketball": Activity(6.5, WorkoutCategory.OTHER),
+    "other": Activity(4.5, WorkoutCategory.OTHER),  # anything else (e.g. unknown types synced from a watch)
 }
+
+# Workout types as Health Connect / HealthKit name them (via the Capacitor plugin) -> our activities.
+# Keys are normalized: lowercase, no spaces or underscores.
+HEALTH_WORKOUT_TYPES = {
+    "running": "running", "runningtreadmill": "running",
+    "walking": "walking", "hiking": "walking",
+    "cycling": "cycling", "handcycling": "cycling", "bikingstationary": "cycling",
+    "swimming": "swimming", "swimmingpool": "swimming", "swimmingopenwater": "swimming",
+    "strengthtraining": "strength_training", "traditionalstrengthtraining": "strength_training",
+    "functionalstrengthtraining": "strength_training", "weightlifting": "strength_training",
+    "crosstraining": "crossfit",
+    "highintensityintervaltraining": "hiit",
+    "yoga": "yoga", "pilates": "pilates",
+    "soccer": "football", "basketball": "basketball",
+}
+
+
+def activity_for_health_type(workout_type: str) -> str:
+    """Map a phone/watch workout type to one of ours; unknown types become "other"."""
+    key = workout_type.lower().replace(" ", "").replace("_", "")
+    return HEALTH_WORKOUT_TYPES.get(key, "other")
 
 
 def get_activity(name: str) -> Activity:

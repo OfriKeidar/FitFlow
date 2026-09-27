@@ -46,6 +46,7 @@ export const ACTIVITY_NAMES: Record<string, string> = {
   pilates: 'פילאטיס',
   football: 'כדורגל',
   basketball: 'כדורסל',
+  other: 'אימון אחר',
 }
 
 export const activityName = (id: string) => ACTIVITY_NAMES[id] ?? id

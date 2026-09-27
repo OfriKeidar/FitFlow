@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException
 
 from fitflow.api.deps import DB, CurrentUser, Today
 from fitflow.api.schemas import (
-    CustomFoodLogIn, FoodLogIn, FoodLogOut, FoodLogUpdate, WeightIn, WeightOut, WorkoutIn, WorkoutOut,
-    WorkoutUpdate,
+    CustomFoodLogIn, FoodLogIn, FoodLogOut, FoodLogUpdate, WeightIn, WeightOut, WorkoutImportIn,
+    WorkoutImportOut, WorkoutIn, WorkoutOut, WorkoutUpdate,
 )
 from fitflow.db.models import Food, FoodLogEntry, WorkoutEntry
 from fitflow.domain.activity import ACTIVITIES
@@ -49,6 +49,18 @@ def log_workout(body: WorkoutIn, user: CurrentUser, db: DB, today: Today):
     if body.activity not in ACTIVITIES:
         raise HTTPException(422, f"Unknown activity. Known: {sorted(ACTIVITIES)}")
     return tracking.log_workout(db, user, body.activity, body.minutes, body.day or today)
+
+
+@router.post("/workouts/import", response_model=WorkoutImportOut)
+def import_workouts(body: WorkoutImportIn, user: CurrentUser, db: DB):
+    """Workouts synced from the phone (Samsung Health -> Health Connect -> the Android app).
+    Safe to call repeatedly: workouts already imported are skipped by their external id."""
+    workouts = [
+        tracking.SyncedWorkout(w.external_id, w.workout_type, w.start.date(), w.minutes, w.kcal)
+        for w in body.workouts
+    ]
+    imported, skipped = tracking.import_workouts(db, user, workouts)
+    return WorkoutImportOut(imported=imported, skipped=skipped)
 
 
 @router.patch("/workout/{entry_id}", response_model=WorkoutOut)
