@@ -36,6 +36,7 @@ The LLM turns free text into calls to tested code. It never makes up a number.
 | 📈 | **Weight trend** without the daily water noise | Time-aware EWMA (alpha depends on the gap between weigh-ins) |
 | 🎯 | **Target date**: "you'll reach 70 kg around Nov 26" | Pace as a % of body weight (safe for every body size); switches to maintenance at the target |
 | 🔍 | **Insights** like "you eat 544 kcal more on weekends" | Statistics with minimum-data and minimum-effect thresholds, so it doesn't report noise |
+| ⌚ | **Samsung Health sync** (Android app) | Capacitor wrapper + Health Connect; idempotent import keyed by workout id; watch-measured calories preferred |
 | 🔐 | **Auth** | scrypt password hashing, stateless JWT, same error for unknown email and wrong password |
 
 ## Architecture
@@ -58,8 +59,8 @@ flowchart LR
 Design decisions, trade-offs and the bugs found along the way are in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ## Stack
-**Backend:** Python 3.11, FastAPI, SQLAlchemy 2, PuLP, Gemini (OpenAI-compatible API) / Anthropic SDK, PyJWT, pytest (118 tests)
-**Frontend:** React 19, TypeScript, Vite, Recharts, a PWA manifest, dark mode
+**Backend:** Python 3.11, FastAPI, SQLAlchemy 2, PuLP, Gemini (OpenAI-compatible API) / Anthropic SDK, PyJWT, pytest (121 tests)
+**Frontend:** React 19, TypeScript, Vite, Recharts, a PWA manifest, dark mode; **Android app** via Capacitor + Health Connect
 **Ops:** Docker (multi-stage, non-root), docker-compose with PostgreSQL, GitHub Actions (tests on SQLite *and* PostgreSQL, lint, build, Docker smoke test), Render blueprint
 
 ## Run it
@@ -68,7 +69,7 @@ Design decisions, trade-offs and the bugs found along the way are in **[docs/ARC
 # Backend
 python -m venv .venv
 .venv/Scripts/pip install -e ".[dev]"
-.venv/Scripts/python -m pytest                     # 118 tests
+.venv/Scripts/python -m pytest                     # 121 tests
 .venv/Scripts/python -m scripts.seed_demo           # optional: demo account with 5 weeks of data
 .venv/Scripts/uvicorn fitflow.api.main:app          # API + interactive docs at http://localhost:8000/docs
 

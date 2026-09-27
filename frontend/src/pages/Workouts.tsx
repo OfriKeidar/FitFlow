@@ -5,6 +5,7 @@ import { Icon, type IconName } from '../components/Icon'
 import { useApi } from '../hooks/useApi'
 import { ACTIVITY_NAMES, CATEGORY_LABELS, activityName } from '../labels'
 import { useUser } from '../user'
+import { isNativeApp, openHealthSettings, syncWorkouts, type SyncResult } from '../health'
 
 const CATEGORY_STYLE: Record<WorkoutCategory, { icon: IconName; color: string }> = {
   strength: { icon: 'barbell', color: 'var(--strength)' },
@@ -29,6 +30,7 @@ export function Workouts() {
         )}
       </div>
 
+      {isNativeApp() && <HealthSyncCard onSynced={() => { week.reload(); stats.reload(); insights.reload() }} />}
       {week.data ? <WeekSummary week={week.data} /> : <div className="skeleton" style={{ height: 200 }} />}
       {stats.data && <StatsGrid stats={stats.data} goal={week.data?.goal ?? 0} />}
       <LogWorkout onLogged={() => { week.reload(); stats.reload(); insights.reload() }} />
@@ -79,6 +81,55 @@ function StatsGrid({ stats, goal }: { stats: WorkoutStats; goal: number }) {
     <p className="muted" style={{ fontSize: 12 }}>
       "שבוע ביעד" הוא שבוע עם לפחות {goal} אימונים (היעד השבועי שלך). הרצף סופר שבועות כאלה ברציפות.
     </p>
+    </div>
+  )
+}
+
+/** Android app only: pull workouts from Samsung Health (via Health Connect). */
+function HealthSyncCard({ onSynced }: { onSynced: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<SyncResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function sync() {
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await syncWorkouts()
+      setResult(r)
+      if (r.status === 'ok' && r.imported > 0) onSynced()
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card stack">
+      <div className="row">
+        <h2 className="row" style={{ gap: 6 }}><Icon name="heart" /> Samsung Health</h2>
+        <button className="btn small" disabled={busy} onClick={sync}>
+          <Icon name="refresh" size={14} /> {busy ? 'מסנכרן…' : 'סנכרון'}
+        </button>
+      </div>
+      <p className="muted" style={{ fontSize: 12 }}>
+        אימונים מ־Samsung Health (דרך Health Connect) נכנסים לכאן אוטומטית בכל פתיחה של האפליקציה.
+      </p>
+      {result?.status === 'ok' && (
+        <p className="pop" style={{ color: 'var(--accent)' }}>
+          <Icon name="check" size={16} /> {result.imported > 0 ? `יובאו ${result.imported} אימונים חדשים` : 'הכל מעודכן, אין אימונים חדשים'}
+        </p>
+      )}
+      {result?.status === 'unavailable' && (
+        <p className="error-text">Health Connect לא זמין בטלפון הזה. אפשר להתקין אותו מ־Google Play.</p>
+      )}
+      {result?.status === 'denied' && (
+        <p className="error-text">
+          לא ניתנה הרשאה לקרוא אימונים. <button className="link-button" onClick={openHealthSettings}>פתיחת הגדרות Health Connect</button>
+        </p>
+      )}
+      {error && <p className="error-text">{error}</p>}
     </div>
   )
 }

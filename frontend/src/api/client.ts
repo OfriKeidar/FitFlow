@@ -1,13 +1,18 @@
 // A thin, typed wrapper around fetch() - one function per backend endpoint.
 // Components never build URLs or headers themselves; they call these functions.
 
+import { Capacitor } from '@capacitor/core'
 import type {
   AuthResult, ChatHistoryItem, ChatReply, DailyStatus, Food, FoodLogEntry, FoodLogUpdate, Goal, Insight,
   MealSuggestion, Pace, PantryItem, PendingAction, Plan, Progress, RegisterData, User, UserUpdate, Week,
   Workout, WorkoutStats,
 } from './types'
 
-const BASE = import.meta.env.VITE_API_URL ?? '/api' // dev: proxied to FastAPI by Vite (see vite.config.ts)
+// Where the API lives:
+//  - web (dev and production): the same origin, under /api (Vite proxies it in dev, see vite.config.ts)
+//  - Android app: its pages load from inside the phone, so it must call the live server by full URL
+const PRODUCTION_API = 'https://fitflow-rgtr.onrender.com/api'
+const BASE = import.meta.env.VITE_API_URL ?? (Capacitor.isNativePlatform() ? PRODUCTION_API : '/api')
 const TOKEN_KEY = 'fitflow.token'
 export const LOGGED_OUT_EVENT = 'fitflow:logged-out'
 
@@ -122,6 +127,8 @@ export const api = {
   updateWorkout: (id: number, changes: { activity?: string; minutes?: number }) =>
     patch<Workout>(`/log/workout/${id}`, changes),
   logWeight: (weightKg: number) => post('/log/weight', { weight_kg: weightKg }),
+  importWorkouts: (workouts: { external_id: string; workout_type: string; start: string; minutes: number; kcal: number | null }[]) =>
+    post<{ imported: number; skipped: number }>('/log/workouts/import', { workouts }),
   activities: () => get<Record<string, string>>('/log/activities'),
 
   searchFoods: (q: string) => get<Food[]>(`/foods?q=${encodeURIComponent(q)}`),

@@ -201,6 +201,26 @@ src/pages/      Onboarding, Today, Chat, Meal, Workouts, Progress
 - **Not done yet (good to mention):** rate limiting on login, email verification, password reset,
   and refresh tokens.
 
+## Android app and Samsung Health sync (`frontend/android`, `src/health.ts`)
+A web page can't read health data, so the same React build is wrapped in a native Android shell with
+**Capacitor**. That's the only difference: one codebase, and the web app keeps working as before.
+
+```
+Samsung Health --(built-in sync)--> Health Connect --> FitFlow Android app --> POST /api/log/workouts/import
+```
+- **Health Connect** is Android's system-wide health store. Samsung Health, Google Fit and most watch apps sync
+  into it, so reading from it covers them all. Access goes through the `@capgo/capacitor-health` plugin, which also
+  supports Apple HealthKit on iPhone, so the same code can be reused there.
+- **Read-only, with explicit permission.** The app asks only to *read* workouts and calories, and never writes.
+- **Idempotent sync.** Each workout carries Health Connect's own id (`external_id`), and the server keeps it unique
+  per user. The app syncs on every open, and overlapping time windows or retries never create duplicates.
+- **Measured beats estimated.** If the watch measured active calories (from heart rate), those are stored.
+  Otherwise the same MET formula as manual logging is used.
+- **CORS.** The Android app's pages load from `https://localhost` inside the phone, so the server allows exactly that
+  origin (not `*`) to call the API.
+- **Schema change on a live database.** The new columns are added by an idempotent startup migration
+  (`db/migrate.py`), because `create_all` never alters existing tables.
+
 ## Deployment and CI
 - **One container** (`Dockerfile`, multi-stage): Node builds the frontend, and the final image contains only
   Python and the built files. `fitflow/web.py` serves the API under `/api` and the React app at `/`,
@@ -242,6 +262,6 @@ src/pages/      Onboarding, Today, Chat, Meal, Workouts, Progress
 `POST /chat` · `GET /chat/history` · `GET /chat/actions` · `POST /chat/actions/{id}/confirm` · `/reject`
 
 ## Tests
-`pytest` runs 118 tests. They include a simulated user with a known TDEE and noisy weigh-ins,
+`pytest` runs 121 tests. They include a simulated user with a known TDEE and noisy weigh-ins,
 checking that the algorithm recovers the TDEE for daily, weekly and monthly weigh-ins, plus
 end-to-end API tests and agent tests with a fake LLM.
