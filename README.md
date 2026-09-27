@@ -2,6 +2,10 @@
 
 [![CI](https://github.com/OfriKeidar/FitFlow/actions/workflows/ci.yml/badge.svg)](https://github.com/OfriKeidar/FitFlow/actions/workflows/ci.yml)
 
+### 🔗 [Live demo: fitflow-rgtr.onrender.com](https://fitflow-rgtr.onrender.com)
+Log in with **`demo@fitflow.app`** / **`demo1234`** (a shared account with 5 weeks of data), or create your own.
+*Free hosting: the first visit after a quiet period can take up to a minute while the server wakes up.*
+
 **An adaptive nutrition & training coach.** Tell it what you ate in plain language, and it tracks
 calories and macros, **learns your real metabolism from your own data**, and suggests meals from what
 you have at home using an optimization algorithm.
