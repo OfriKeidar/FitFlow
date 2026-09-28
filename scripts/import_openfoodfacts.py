@@ -6,11 +6,16 @@ License: Open Database License (ODbL) - the derived file must credit the source 
 It complements the national database: Tzameret has generic foods ("יוגורט 3%"), Open Food Facts has
 branded products ("יוגורט יופלה תות"), with Hebrew names and barcodes.
 
-Usage:  .venv/Scripts/python -m scripts.import_openfoodfacts          (download what's missing, then convert)
-        .venv/Scripts/python -m scripts.import_openfoodfacts convert  (convert the pages already downloaded)
+Usage:  .venv/Scripts/python -m scripts.import_openfoodfacts hf       (full export - recommended)
+        .venv/Scripts/python -m scripts.import_openfoodfacts          (the search API, page by page)
+        .venv/Scripts/python -m scripts.import_openfoodfacts convert  (convert what's already downloaded)
 
-Downloading is resumable: each page of the search API is saved to data_raw/openfoodfacts/ (gitignored),
-and pages already there are skipped. The API allows ~10 searches a minute, so the script waits between pages.
+Two ways to download, both saved to data_raw/openfoodfacts/ (gitignored):
+  - hf: the official full export on Hugging Face (one Parquet file, ~7.7 GB, 4.7M products). DuckDB reads
+    it over HTTP and fetches only the needed columns (~600 MB), keeping the products sold in Israel.
+    Needs:  pip install duckdb
+  - the search API: resumable, one saved file per page. The public API is often overloaded (503/401),
+    so this is slow; it's kept for small updates.
 """
 
 import json
@@ -30,6 +35,10 @@ FIELDS = "code,product_name,product_name_he,brands,categories_tags,serving_quant
 PAGE_SIZE = 100
 SECONDS_BETWEEN_PAGES = 7  # stays under the API's rate limit for searches
 USER_AGENT = "FitFlow/0.1 (portfolio project; https://github.com/OfriKeidar/FitFlow)"
+PARQUET = "https://huggingface.co/datasets/openfoodfacts/product-database/resolve/main/food.parquet"
+HF_FILE = RAW / "hf_israel.json"
+NUTRIENTS = {"energy-kcal": "energy-kcal_100g", "proteins": "proteins_100g",
+             "carbohydrates": "carbohydrates_100g", "fat": "fat_100g"}
 
 HEBREW = re.compile(r"[֐-׿]")
 MAX_NAME = 100  # the foods.name column length
@@ -76,6 +85,36 @@ def download() -> None:
             time.sleep(SECONDS_BETWEEN_PAGES)
         page_count = -(-data["count"] // PAGE_SIZE)  # ceiling division
         page += 1
+
+
+def download_export() -> None:
+    """Products sold in Israel from the full export, in the same shape as the search API returns them."""
+    import duckdb  # only needed here
+
+    con = duckdb.connect()
+    con.execute("INSTALL httpfs; LOAD httpfs;")
+    # Reading a remote file is thousands of small HTTP range requests, so it's latency-bound, not CPU-bound:
+    # many more threads than cores keep many requests in flight at once.
+    con.execute("SET threads = 64")
+    rows = con.execute(f"""
+        SELECT code, product_name, brands, categories_tags, serving_quantity,
+               list_filter(nutriments, n -> n.name IN ('energy-kcal', 'proteins', 'carbohydrates', 'fat'))
+        FROM read_parquet('{PARQUET}')
+        WHERE list_contains(countries_tags, 'en:israel')
+    """).fetchall()
+
+    products = []
+    for code, names, brands, categories, serving, nutriments in rows:
+        by_lang = {n["lang"]: n["text"] for n in names or [] if n["text"]}
+        products.append({
+            "code": code, "product_name_he": by_lang.get("he"),
+            "product_name": by_lang.get("main") or next(iter(by_lang.values()), None),
+            "brands": brands, "categories_tags": categories, "serving_quantity": serving,
+            "nutriments": {NUTRIENTS[n["name"]]: n["100g"] for n in nutriments or [] if n["100g"] is not None},
+        })
+    RAW.mkdir(parents=True, exist_ok=True)
+    HF_FILE.write_text(json.dumps({"products": products}, ensure_ascii=False), encoding="utf-8")
+    print(f"{len(products)} products sold in Israel -> {HF_FILE}")
 
 
 # --- convert ---
@@ -144,12 +183,15 @@ def convert(products: list[dict]) -> list[list]:
 
 
 def main() -> None:
-    if "convert" not in sys.argv[1:]:
+    if "hf" in sys.argv[1:]:
+        download_export()
+    elif "convert" not in sys.argv[1:]:
         download()
-    pages = sorted(RAW.glob("page_*.json"))
-    if not pages:
-        raise SystemExit(f"No downloaded pages in {RAW}")
-    products = [p for path in pages for p in json.loads(path.read_text(encoding="utf-8"))["products"]]
+    # The export (when present) first: it's the complete one. convert() keeps the first copy of a product.
+    files = ([HF_FILE] if HF_FILE.exists() else []) + sorted(RAW.glob("page_*.json"))
+    if not files:
+        raise SystemExit(f"Nothing downloaded in {RAW}")
+    products = [p for path in files for p in json.loads(path.read_text(encoding="utf-8"))["products"]]
     rows = convert(products)
     OUT.write_text(json.dumps({
         "source": "Open Food Facts (https://world.openfoodfacts.org), Open Database License (ODbL)",
