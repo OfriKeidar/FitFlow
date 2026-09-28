@@ -1,9 +1,10 @@
 """Food search with relevance ranking - used by the app's search box and by the AI coach.
 
-With ~13,000 foods, a plain "name contains" search returns the wrong thing first: for "ביצה",
+With thousands of foods, a plain "name contains" search returns the wrong thing first: for "ביצה",
 the shortest match is dried egg powder (605 kcal per 100 g). So results are ranked:
 
-    0. names containing every word of the query first ("חומוס צבר" -> the Tzabar product)
+    0. names containing every word of the query first ("חומוס צבר" -> the Tzabar product),
+       and the query as a whole word before the query inside another word ("חלב" before "חלבון")
     1. our common foods first (fresh egg, chicken breast...) - the usual intent
     2. how well the name matches: exact > starts with the query > contains it as a word > contains it
     3. processed forms (dried, powder, flour, infant formula...) last, unless the user asked for them
@@ -11,6 +12,8 @@ the shortest match is dried egg powder (605 kcal per 100 g). So results are rank
        product matches better, e.g. searching a brand name
     5. shorter (simpler) names first
 """
+
+import re
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -23,16 +26,18 @@ CANDIDATES = 300  # rank in Python among at most this many database matches
 SOURCE_ORDER = {"fitflow": 0, "tzameret": 1, "off": 2}
 
 
+LETTER = "א-תA-Za-z"  # Hebrew and Latin letters; anything else (space, comma, geresh, %) ends a word
+
+
 def match_score(name: str, query: str) -> int:
-    """Lower is better."""
+    """Lower is better. "Whole word": "חלב" matches "חלב 3%" and "קפה עם חלב", but not "חלבון" or "חלבה"."""
     if name == query:
         return 0
-    if name.startswith(query + ",") or name.startswith(query + " ") or name.startswith(query):
-        return 1
-    if f" {query} " in f" {name.replace(',', ' ')} ":
-        return 2  # a whole word inside the name
+    whole_word = re.search(rf"(?<![{LETTER}]){re.escape(query)}(?![{LETTER}])", name)
+    if whole_word:
+        return 1 if whole_word.start() == 0 else 2  # the name starts with it / contains it as a word
     if query in name:
-        return 3
+        return 3  # only inside another word
     return 4  # matched only some of the words
 
 
@@ -43,7 +48,8 @@ def missing_words(name: str, query: str) -> int:
 def rank_key(food: Food, query: str) -> tuple:
     processed = any(word in food.name for word in PROCESSED) and not any(word in query for word in PROCESSED)
     source = SOURCE_ORDER.get(food.source, 3)
-    return (missing_words(food.name, query), source != 0, match_score(food.name, query), processed, source,
+    score = match_score(food.name, query)
+    return (missing_words(food.name, query), score >= 3, source != 0, score, processed, source,
             len(food.name), food.name)
 
 

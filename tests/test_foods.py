@@ -106,3 +106,9 @@ def test_generic_food_ranks_before_branded_products(client, national_db, tmp_pat
     # ...but with the brand in the query, names containing every word come first.
     names = [f["name"] for f in client.get("/foods", params={"q": "חומוס צבר"}).json()]
     assert "חומוס (צבר)" in names and all("צבר" in name for name in names[:4])
+
+
+def test_whole_word_matches_rank_before_substrings(client, national_db):
+    names = [f["name"] for f in client.get("/foods", params={"q": "חלב"}).json()]
+    assert names[0] == "חלב 3%"
+    assert not any("חלבון" in n or "חלבה" in n for n in names[:10])  # protein, halva: other words
