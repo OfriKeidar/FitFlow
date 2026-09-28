@@ -189,30 +189,3 @@ def test_fit_my_meal(client, user):
     r = client.post("/coach/fit-meal", headers=user, json={"food_ids": ids, "hour": 20}).json()
     assert {i["food"] for i in r["items"]} == {"חזה עוף", "אורז לבן"}
     assert r["totals"]["protein_g"] > 0.7 * r["meal_target"]["protein_g"]
-
-
-def test_import_workouts_from_health_connect(client, user):
-    workouts = [
-        {"external_id": "hc-1", "workout_type": "running", "start": "2026-09-06T07:30:00+03:00", "minutes": 30, "kcal": 310},
-        {"external_id": "hc-2", "workout_type": "traditionalStrengthTraining", "start": "2026-09-06T18:00:00+03:00", "minutes": 50},
-        {"external_id": "hc-3", "workout_type": "paddleboarding", "start": "2026-09-06T19:00:00+03:00", "minutes": 20},
-    ]
-    r = client.post("/log/workouts/import", headers=user, json={"workouts": workouts}).json()
-    assert r == {"imported": 3, "skipped": 0}
-
-    week = client.get("/workouts/week", headers=user).json()
-    by_activity = {w["activity"]: w for w in week["workouts"]}
-    assert by_activity["running"]["kcal"] == 310                  # the watch's measured calories
-    assert by_activity["strength_training"]["kcal"] > 0           # no calories -> MET formula
-    assert by_activity["other"]["category"] == "other"            # unknown type
-
-    # Syncing again (the app syncs on every open) must not duplicate anything.
-    again = client.post("/log/workouts/import", headers=user, json={"workouts": workouts}).json()
-    assert again == {"imported": 0, "skipped": 3}
-
-
-def test_cors_allows_the_android_app_only(client):
-    ok = client.options("/me", headers={"Origin": "https://localhost", "Access-Control-Request-Method": "GET"})
-    assert ok.headers.get("access-control-allow-origin") == "https://localhost"
-    other = client.options("/me", headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "GET"})
-    assert "access-control-allow-origin" not in other.headers

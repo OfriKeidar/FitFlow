@@ -24,8 +24,8 @@ APP_URL = os.getenv("APP_URL", "http://localhost:5173")
 OUT = Path(__file__).resolve().parents[1] / "docs" / "screenshots"
 PAGES = [("today", "/"), ("meal", "/meal"), ("workouts", "/workouts"), ("progress", "/progress"),
          ("profile", "/profile")]
-# Sent to the AI coach for the chat screenshot: household units ("a cup") resolved via the national database.
-CHAT_MESSAGE = "אכלתי כוס שקשוקה ופרוסת לחם מלא"
+# Sent to the AI coach for the chat screenshot: household units ("a large portion") resolved via the national database.
+CHAT_MESSAGE = "אכלתי מנה גדולה של שקשוקה ו-2 פרוסות לחם מלא"
 
 
 def main() -> None:

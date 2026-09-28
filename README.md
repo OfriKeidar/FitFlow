@@ -38,16 +38,13 @@ The LLM turns free text into calls to tested code. It never makes up a number.
 | 🎯 | **Target date**: "you'll reach 70 kg around Nov 26" | Pace as a % of body weight (safe for every body size); switches to maintenance at the target |
 | 🥗 | **4,500+ Israeli foods** with household units ("1 cup", "1 slice") | The Ministry of Health's national nutrition database, imported by a script; relevance-ranked search so "egg" finds a fresh egg, not egg powder |
 | 🔍 | **Insights** like "you eat 544 kcal more on weekends" | Statistics with minimum-data and minimum-effect thresholds, so it doesn't report noise |
-| ⌚ | **Samsung Health sync** (Android app) | Capacitor wrapper + Health Connect; idempotent import keyed by workout id; watch-measured calories preferred |
 | 🔐 | **Auth** | scrypt password hashing, stateless JWT, same error for unknown email and wrong password |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    UI["React + TypeScript<br/>(web, mobile-first, RTL)"] -->|"/api (JWT)"| API["FastAPI<br/>validation · auth"]
-    APP["Android app<br/>(Capacitor)"] -->|"same UI + workout import"| API
-    HC["Health Connect<br/>(Samsung Health)"] -.->|"workouts"| APP
+    UI["React + TypeScript<br/>(mobile-first, RTL)"] -->|"/api (JWT)"| API["FastAPI<br/>validation · auth"]
     API --> SVC["services/<br/>use-cases · food search"]
     API --> AI["ai/<br/>agent + tools<br/>(Gemini / Claude)"]
     AI -->|"tool calls"| SVC
@@ -61,33 +58,35 @@ flowchart LR
 - **`ai/`** is the agent loop, the tool definitions and the prompt. Write tools only create *pending actions*.
 - **`api/`** holds the FastAPI routes and Pydantic schemas. **`web.py`** serves the API and the built frontend from one origin.
 - **`data/`** ships the food databases as JSON; `db/seed.py` loads them on first start and `db/migrate.py` upgrades existing databases in place.
-- **`frontend/android/`** is the same web app wrapped as an Android app, which adds one thing the browser can't do: reading workouts from Health Connect.
 
 Design decisions, trade-offs and the bugs found along the way are in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ## Algorithms
 
-| Algorithm | Where | What it does in the app |
+The core logic is built on classic algorithms from CS courses:
+
+| Algorithm | Where | The problem it solves in the app |
 |---|---|---|
-| **Mifflin-St Jeor** BMR × activity factor | `domain/energy.py` | The first guess of daily calorie burn (TDEE), from sex, age, height and weight |
-| **Energy-balance targets** | `domain/energy.py` | Daily calories = TDEE ± the gap for the weekly pace (7,700 kcal per kg). Protein by body weight, fat 25%, carbs the rest; a safety floor |
-| **Time-aware EWMA** (exponential smoothing) | `domain/trend.py` | The weight trend line. `alpha = 1 - 0.9^days`, so a gap of several days between weigh-ins counts correctly |
-| **Least-squares linear regression** | `domain/trend.py` | The rate of weight change (kg/day), used to learn the real TDEE. Chosen over the EWMA, which lags |
-| **Damped adaptive update** (a learning rate + a cap) | `domain/trend.py` | TDEE moves halfway towards what the data says, at most 150 kcal per week, only with 14+ days and 70%+ days logged |
-| **Integer Linear Programming** (PuLP / CBC solver) | `domain/optimizer.py` | "What should I eat?": integer servings from the pantry, binary "used" variables, max 4 foods, weighted over/under deviation from the meal's macro target |
-| **No-good cuts** | `domain/optimizer.py` | "Another suggestion": a constraint that forbids the previous combination, then solve again |
-| **Constrained fitting** (ILP with half-servings) | `domain/optimizer.py` | "Fit my meal": keep every food the user picked, and find amounts that match what's left today |
-| **MET-based calorie estimate** (net MET) | `domain/activity.py` | Workout calories = (MET - 1) × weight × hours, so resting burn isn't counted twice |
-| **Statistical insights with thresholds** | `domain/insights.py` | Weekend vs weekday intake, protein on training vs rest days; reported only with enough days and a big enough effect |
-| **Streaks over calendar weeks** | `domain/insights.py`, `workout_stats.py` | Current and best streak of weeks that met the workout goal (the Israeli week, starting Sunday) |
-| **Relevance ranking** | `services/food_search.py` | Sorting 4,500 foods by a tuple key: curated first, match quality, processed forms last, shorter names first |
-| **Agentic tool-use loop** | `ai/agent.py` | The LLM calls search and "propose" tools in a loop; the code computes every number |
-| **Circuit breaker + fallback** | `ai/providers.py` | After a 429/503 a model is skipped for a cooldown, and the next model on the list answers |
-| **scrypt + HMAC-SHA256 (JWT)** | `services/auth.py` | Salted password hashing, signed tokens, constant-time comparison |
+| **Knapsack** (bounded, multi-dimensional) | `domain/optimizer.py` | "What should I eat from what's at home?" Foods are the items, servings are copies (bounded by the pantry), and the 4 macros are 4 "weight" dimensions. The goal is to land closest to the meal's target, not to maximize value |
+| **Integer Linear Programming**, solved by **branch and bound** (CBC) | `domain/optimizer.py` | How the knapsack above is actually solved, with extra rules: at most 4 foods, at most 2 per category |
+| **LP modeling techniques**: absolute value with deviation variables, **Big-M** linking | `domain/optimizer.py` | `|total - target|` becomes `under - over` variables, so being short on protein can cost more than being over. Big-M links "how many servings" (integer) to "is it on the plate" (binary) |
+| **No-good cuts** (enumerating distinct solutions) | `domain/optimizer.py` | "Another suggestion": a constraint that forbids exactly the previous combination, then solve again |
+| **Dynamic programming, 1-D** (the Kadane pattern) | `domain/workout_stats.py` | Longest workout streak in days and in weeks: `run[i] = run[i-1] + 1` if day *i* follows day *i-1*, else `1`; the answer is `max(run)`. O(n) time, O(1) memory |
+| **Recurrence / exponential smoothing** (a low-pass filter) | `domain/trend.py` | The weight trend: `trend[i] = trend[i-1] + α·(weight[i] - trend[i-1])`, with α depending on the days between weigh-ins. Filters daily water noise in one pass |
+| **Least-squares linear regression** | `domain/trend.py` | The rate of weight change (kg/day), in closed form, O(n) |
+| **Online learning update** with step clipping | `domain/trend.py` | Adaptive TDEE: each week, a step towards what the data shows (learning rate 0.5, capped at 150 kcal), like one gradient-descent step with gradient clipping |
+| **Sorting by a lexicographic key** + top-k | `services/food_search.py` | Ranking 4,500 foods: (curated first, match quality, processed last, name length). O(C log C) over at most 300 candidates |
+| **Hash maps / sets** | `workout_stats.py`, `db/seed.py` | Counting the most frequent activity, and O(1) duplicate checks when loading the food database |
+
+**Why ILP and not the knapsack DP?** The textbook DP runs in O(n·W), pseudo-polynomial in a *single*
+capacity W. Here there are 4 dimensions (calories, protein, carbs, fat), so the DP table would be
+n × K × P × C × F states, plus the "at most 4 foods / 2 per category" rules as extra dimensions. The
+problem is NP-hard in general, but with ~10-20 pantry foods, branch and bound solves it in milliseconds,
+and new rules are just new constraints.
 
 ## Stack
 **Backend:** Python 3.11, FastAPI, SQLAlchemy 2, PuLP, Gemini (OpenAI-compatible API) / Anthropic SDK, PyJWT, pytest (126 tests)
-**Frontend:** React 19, TypeScript, Vite, Recharts, a PWA manifest, dark mode; **Android app** via Capacitor + Health Connect
+**Frontend:** React 19, TypeScript, Vite, Recharts, a PWA manifest, dark mode
 **Ops:** Docker (multi-stage, non-root), docker-compose with PostgreSQL, GitHub Actions (tests on SQLite *and* PostgreSQL, lint, build, Docker smoke test), Render blueprint
 
 ## Run it

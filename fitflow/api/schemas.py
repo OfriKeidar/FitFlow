@@ -1,6 +1,6 @@
 """Request / response shapes. Pydantic validates every input before it reaches our code."""
 
-from datetime import date, datetime
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_serializer, model_validator
@@ -161,24 +161,6 @@ class FoodLogUpdate(BaseModel):
     protein_g: float | None = Field(default=None, ge=0, le=500)
     carbs_g: float | None = Field(default=None, ge=0, le=1000)
     fat_g: float | None = Field(default=None, ge=0, le=500)
-
-
-class SyncedWorkoutIn(BaseModel):
-    """One workout read from Health Connect on the phone."""
-    external_id: str = Field(min_length=1, max_length=200)
-    workout_type: str = Field(max_length=60)
-    start: datetime
-    minutes: float = Field(gt=0, le=600)
-    kcal: float | None = Field(default=None, ge=0, le=5000)  # measured by the watch, if available
-
-
-class WorkoutImportIn(BaseModel):
-    workouts: list[SyncedWorkoutIn] = Field(max_length=200)
-
-
-class WorkoutImportOut(BaseModel):
-    imported: int
-    skipped: int  # already imported earlier
 
 
 class WorkoutUpdate(BaseModel):

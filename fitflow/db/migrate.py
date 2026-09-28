@@ -29,11 +29,3 @@ def migrate(engine: Engine) -> None:
     _add_column_if_missing(engine, "foods", "source", "VARCHAR(20) NOT NULL DEFAULT 'fitflow'")
     _add_column_if_missing(engine, "foods", "external_code", "INTEGER")
 
-    # Health Connect sync (workout source + id in the source app)
-    _add_column_if_missing(engine, "workouts", "source", "VARCHAR(20) NOT NULL DEFAULT 'manual'")
-    _add_column_if_missing(engine, "workouts", "external_id", "VARCHAR(200)")
-    with engine.begin() as conn:
-        # Unique per user; rows without an external id (NULL) never conflict, in SQLite and PostgreSQL alike.
-        conn.execute(text(
-            "CREATE UNIQUE INDEX IF NOT EXISTS ux_workouts_user_external ON workouts (user_id, external_id)"
-        ))

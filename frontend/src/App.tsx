@@ -12,7 +12,6 @@ import { Profile } from './pages/Profile'
 import { Today } from './pages/Today'
 import { Workouts } from './pages/Workouts'
 import { UserContext } from './user'
-import { isNativeApp, syncWorkouts } from './health'
 
 // The progress page pulls in the charting library (~370 KB), so load it only when it's opened.
 const Progress = lazy(() => import('./pages/Progress').then((m) => ({ default: m.Progress })))
@@ -43,12 +42,6 @@ export default function App() {
     window.addEventListener(LOGGED_OUT_EVENT, onLogout)
     return () => window.removeEventListener(LOGGED_OUT_EVENT, onLogout)
   }, [])
-
-  // In the Android app: pull new workouts from Samsung Health on every open, quietly in the background.
-  // (A failure here isn't worth interrupting the user; the workouts screen has a manual sync button.)
-  useEffect(() => {
-    if (screen === 'ready' && isNativeApp()) syncWorkouts().catch(() => {})
-  }, [screen])
 
   function loggedIn(auth: AuthResult) {
     setToken(auth.token)
