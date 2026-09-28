@@ -2,9 +2,11 @@
 
 1. foods.json - our short list of common foods with natural servings ("1 large egg"). Loaded into
    an empty table.
-2. foods_tzameret.json - the Israeli national nutrition database (~4,500 foods, per 100 g, with
-   household units). Loaded once; generated from the Ministry of Health's CSVs by
-   scripts/import_tzameret.py.
+2. External databases, per 100 g, each loaded once. Generated offline by scripts in scripts/:
+   - foods_tzameret.json - the Israeli national nutrition database (~4,500 generic foods, with
+     household units). scripts/import_tzameret.py
+   - foods_off.json - Open Food Facts (branded Israeli products, with barcodes).
+     scripts/import_openfoodfacts.py
 """
 
 import json
@@ -19,7 +21,8 @@ from fitflow.db.models import Food, FoodUnit
 # Shipped inside the package (see [tool.setuptools.package-data]), so it works when installed too.
 DATA = Path(__file__).resolve().parent.parent / "data"
 FOODS_FILE = DATA / "foods.json"
-TZAMERET_FILE = DATA / "foods_tzameret.json"
+# Loaded in this order. On a name collision the earlier one wins: generic foods before branded products.
+FOOD_DATABASES = {"tzameret": DATA / "foods_tzameret.json", "off": DATA / "foods_off.json"}
 ALL_MEALS = "BREAKFAST,LUNCH,DINNER,SNACK"
 
 
@@ -32,26 +35,29 @@ def seed_foods(db: Session) -> int:
     return len(rows)
 
 
-def tzameret_enabled() -> bool:
-    # Tests turn it off: loading 4,500 foods before every test would make the suite slow.
-    return os.getenv("SEED_TZAMERET", "true").lower() not in ("0", "false", "no")
+def food_databases_enabled() -> bool:
+    # Tests turn it off: loading thousands of foods before every test would make the suite slow.
+    return os.getenv("SEED_FOOD_DATABASES", "true").lower() not in ("0", "false", "no")
 
 
-def seed_tzameret(db: Session, path: Path = TZAMERET_FILE) -> int:
-    """Add the national database once. Foods whose name we already have (e.g. "שמן זית") keep our
-    version. Uses bulk inserts: ~4,500 foods + ~15,000 units in a couple of statements, not one by one."""
-    if db.scalar(select(Food.id).where(Food.source == "tzameret").limit(1)) is not None:
+def seed_food_database(db: Session, source: str, path: Path | None = None) -> int:
+    """Add one external database once. Foods whose name we already have (e.g. "שמן זית") keep the
+    existing version. Uses bulk inserts: thousands of foods + units in a couple of statements, not one by one."""
+    path = path or FOOD_DATABASES[source]
+    if not path.exists() or db.scalar(select(Food.id).where(Food.source == source).limit(1)) is not None:
         return 0
     data = json.loads(path.read_text(encoding="utf-8"))
     existing = set(db.scalars(select(Food.name)))
     rows = [r for r in data["foods"] if r[1] not in existing]
+    if not rows:
+        return 0
 
     db.execute(insert(Food), [
         {"name": name, "serving": "100 גרם", "kcal": kcal, "protein_g": protein, "carbs_g": carbs,
-         "fat_g": fat, "category": category, "meals": ALL_MEALS, "source": "tzameret", "external_code": code}
+         "fat_g": fat, "category": category, "meals": ALL_MEALS, "source": source, "external_code": code}
         for code, name, kcal, protein, carbs, fat, category, _units in rows
     ])
-    ids = dict(db.execute(select(Food.external_code, Food.id).where(Food.source == "tzameret")).all())
+    ids = dict(db.execute(select(Food.external_code, Food.id).where(Food.source == source)).all())
     unit_rows = [
         {"food_id": ids[code], "name": unit, "grams": grams}
         for code, *_, units in rows for unit, grams in units

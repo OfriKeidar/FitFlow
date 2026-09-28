@@ -50,7 +50,7 @@ flowchart LR
     AI -->|"tool calls"| SVC
     SVC --> DOM["domain/<br/>pure algorithms<br/>(no DB, no network)"]
     SVC --> DB[("PostgreSQL / SQLite<br/>SQLAlchemy")]
-    MOH["Ministry of Health<br/>food CSVs"] -.->|"scripts/import_tzameret.py<br/>(once, offline)"| DB
+    MOH["Ministry of Health (generic foods)<br/>+ Open Food Facts (Israeli products)"] -.->|"scripts/import_*.py<br/>(once, offline)"| DB
 ```
 
 - **`domain/`** holds the algorithms as pure functions: energy targets, adaptive TDEE, the ILP optimizer, insights. Most of the tests live here.
@@ -68,21 +68,10 @@ The core logic is built on classic algorithms from CS courses:
 | Algorithm | Where | The problem it solves in the app |
 |---|---|---|
 | **Knapsack** (bounded, multi-dimensional) | `domain/optimizer.py` | "What should I eat from what's at home?" Foods are the items, servings are copies (bounded by the pantry), and the 4 macros are 4 "weight" dimensions. The goal is to land closest to the meal's target, not to maximize value |
-| **Integer Linear Programming**, solved by **branch and bound** (CBC) | `domain/optimizer.py` | How the knapsack above is actually solved, with extra rules: at most 4 foods, at most 2 per category |
-| **LP modeling techniques**: absolute value with deviation variables, **Big-M** linking | `domain/optimizer.py` | `|total - target|` becomes `under - over` variables, so being short on protein can cost more than being over. Big-M links "how many servings" (integer) to "is it on the plate" (binary) |
-| **No-good cuts** (enumerating distinct solutions) | `domain/optimizer.py` | "Another suggestion": a constraint that forbids exactly the previous combination, then solve again |
 | **Dynamic programming, 1-D** (the Kadane pattern) | `domain/workout_stats.py` | Longest workout streak in days and in weeks: `run[i] = run[i-1] + 1` if day *i* follows day *i-1*, else `1`; the answer is `max(run)`. O(n) time, O(1) memory |
 | **Recurrence / exponential smoothing** (a low-pass filter) | `domain/trend.py` | The weight trend: `trend[i] = trend[i-1] + α·(weight[i] - trend[i-1])`, with α depending on the days between weigh-ins. Filters daily water noise in one pass |
 | **Least-squares linear regression** | `domain/trend.py` | The rate of weight change (kg/day), in closed form, O(n) |
-| **Online learning update** with step clipping | `domain/trend.py` | Adaptive TDEE: each week, a step towards what the data shows (learning rate 0.5, capped at 150 kcal), like one gradient-descent step with gradient clipping |
-| **Sorting by a lexicographic key** + top-k | `services/food_search.py` | Ranking 4,500 foods: (curated first, match quality, processed last, name length). O(C log C) over at most 300 candidates |
 | **Hash maps / sets** | `workout_stats.py`, `db/seed.py` | Counting the most frequent activity, and O(1) duplicate checks when loading the food database |
-
-**Why ILP and not the knapsack DP?** The textbook DP runs in O(n·W), pseudo-polynomial in a *single*
-capacity W. Here there are 4 dimensions (calories, protein, carbs, fat), so the DP table would be
-n × K × P × C × F states, plus the "at most 4 foods / 2 per category" rules as extra dimensions. The
-problem is NP-hard in general, but with ~10-20 pantry foods, branch and bound solves it in milliseconds,
-and new rules are just new constraints.
 
 ## Stack
 **Backend:** Python 3.11, FastAPI, SQLAlchemy 2, PuLP, Gemini (OpenAI-compatible API) / Anthropic SDK, PyJWT, pytest (126 tests)
@@ -115,4 +104,8 @@ The AI coach needs a key in `.env` (copy `.env.example`). A **free Gemini key** 
 without one, including all the tests (the agent is tested against scripted fake clients).
 
 ## Data
-Food nutrition values: the Israeli national nutrition database (Tzameret), Israel Ministry of Health, via [data.gov.il](https://data.gov.il).
+Food nutrition values:
+- Generic foods: the Israeli national nutrition database (Tzameret), Israel Ministry of Health, via [data.gov.il](https://data.gov.il).
+- Branded Israeli products: [Open Food Facts](https://world.openfoodfacts.org), available under the
+  [Open Database License](https://opendatacommons.org/licenses/odbl/1-0/). `fitflow/data/foods_off.json` is a
+  derived database and is also released under the ODbL.

@@ -226,7 +226,7 @@ src/pages/      Onboarding, Today, Chat, Meal, Workouts, Progress
   (a typo like 87 instead of 78), and is otherwise logged as today's weight. Until the TDEE has been learned from
   data, a corrected sex, age, height, activity level or weight also recomputes the formula TDEE.
 
-## The national food database (`scripts/import_tzameret.py`, `services/food_search.py`)
+## The food databases (`scripts/import_tzameret.py`, `scripts/import_openfoodfacts.py`, `services/food_search.py`)
 - **Source:** the Ministry of Health's Tzameret CSVs (foods, household-unit names, unit weights per food).
   The script converts them once into `fitflow/data/foods_tzameret.json` (~670 KB, 4,508 foods), and the
   server loads it on first start with two bulk inserts (foods, then ~9,800 units).
@@ -239,7 +239,16 @@ src/pages/      Onboarding, Today, Chat, Meal, Workouts, Progress
 - **Data cleaning found by testing on PostgreSQL rules.** One name was 107 characters, longer than
   `VARCHAR(100)`. SQLite ignores the limit; PostgreSQL would have failed the whole deploy. It turned
   out to be a questionnaire (FFQ) row, not a food, so all 116 FFQ rows are filtered, with a length guard.
-- **Tests skip it by default** (`SEED_TZAMERET=false`), and `test_foods.py` loads it explicitly.
+- **Branded products from Open Food Facts** (`scripts/import_openfoodfacts.py`). The national database has
+  generic foods; Open Food Facts adds Israeli packaged products with barcodes. It's crowd-sourced, so the
+  import cleans it: a Hebrew name is required, all four macros must be present, and the energy must roughly
+  match the macros (4/4/9 kcal per gram). A big mismatch is usually kJ typed as kcal. The public API is often
+  overloaded, so downloading is resumable and retries with a growing wait.
+- **Generic before branded.** Ranking puts names containing every query word first ("חומוס צבר" finds
+  the Tzabar products), then our curated foods, then match quality, then generic foods before branded ones.
+- **Barcodes are 13 digits**, too big for a 32-bit `INTEGER`, so `external_code` is `BIGINT`, widened on
+  PostgreSQL by the startup migration (SQLite's integers are already 64-bit).
+- **Tests skip the databases by default** (`SEED_FOOD_DATABASES=false`), and `test_foods.py` loads them explicitly.
 - **Schema change on a live database.** The new columns are added by an idempotent startup migration
   (`db/migrate.py`), because `create_all` never alters existing tables.
 

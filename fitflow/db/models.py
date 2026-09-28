@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from sqlalchemy import ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -53,9 +53,11 @@ class Food(Base):
     category: Mapped[str] = mapped_column(String(20))
     meals: Mapped[str] = mapped_column(String(50))  # comma separated, e.g. "LUNCH,DINNER"
     # "fitflow": our short list of common foods, with natural servings ("1 large egg").
-    # "tzameret": the national nutrition database - thousands of foods, always per 100 g.
+    # "tzameret": the national nutrition database - thousands of generic foods, always per 100 g.
+    # "off": Open Food Facts - branded Israeli products, per 100 g.
     source: Mapped[str] = mapped_column(String(20), default="fitflow", server_default="fitflow")
-    external_code: Mapped[int | None] = mapped_column(default=None)  # the food's code in its source
+    # The food's code in its source. BigInteger: barcodes have 13 digits, too big for a 32-bit INTEGER.
+    external_code: Mapped[int | None] = mapped_column(BigInteger, default=None)
     units: Mapped[list["FoodUnit"]] = relationship(order_by="FoodUnit.grams")
 
 

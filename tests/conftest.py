@@ -3,8 +3,8 @@ import os
 # Must be set before the app is imported, so tests never touch the real DB file.
 # In-memory SQLite by default; CI also runs the suite against PostgreSQL via TEST_DATABASE_URL.
 os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL", "sqlite://")
-# The national food database (4,500 foods) is loaded only by the tests that need it - see test_foods.py.
-os.environ["SEED_TZAMERET"] = "false"
+# The external food databases (thousands of foods) are loaded only by the tests that need them - see test_foods.py.
+os.environ["SEED_FOOD_DATABASES"] = "false"
 
 from datetime import date  # noqa: E402
 
