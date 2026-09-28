@@ -37,7 +37,7 @@ def create_demo_user(db: Session, today: date | None = None) -> User:
 
     user = tracking.create_user(
         db, start, email=DEMO_EMAIL, password_hash=auth.hash_password(DEMO_PASSWORD),
-        name="דניאל", sex="male", age=27, height_cm=178, start_weight_kg=84.0,
+        name="עופרי", sex="male", age=27, height_cm=178, start_weight_kg=84.0,
         activity="sedentary", goal="cut", target_weight_kg=76.0, pace="recommended",
         weigh_in_frequency="daily", weekly_workout_goal=4,
     )

@@ -64,7 +64,7 @@ def main() -> None:
         # Onboarding, step 2 (goal + target weight with the estimated date)
         page = phone(logged_in=False)
         page.goto(APP_URL)
-        page.get_by_placeholder("השם שלך").fill("דנה")
+        page.get_by_placeholder("השם שלך").fill("עופרי")
         page.get_by_role("button", name="המשך").click()
         page.wait_for_timeout(1200)  # the date preview is debounced
         page.screenshot(path=OUT / "onboarding.png")

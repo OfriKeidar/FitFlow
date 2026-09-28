@@ -45,9 +45,9 @@ TAG_TO_CATEGORY = [
 
 # --- download ---
 
-def fetch_page(page: int, attempts: int = 6) -> dict:
+def fetch_page(page: int, attempts: int = 20) -> dict:
     """One page of search results. The public API is often overloaded (503) or rate limited (429),
-    so retry with a growing wait: 30 s, 60 s, 90 s..."""
+    so retry with a growing wait: 30 s, 60 s, 90 s... up to 5 minutes."""
     url = f"{API}?countries_tags_en=israel&fields={FIELDS}&page_size={PAGE_SIZE}&page={page}"
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     for attempt in range(1, attempts + 1):
@@ -57,8 +57,9 @@ def fetch_page(page: int, attempts: int = 6) -> dict:
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
             if attempt == attempts:
                 raise
-            print(f"page {page}: {e} - retrying in {30 * attempt} s", flush=True)
-            time.sleep(30 * attempt)
+            wait = min(30 * attempt, 300)
+            print(f"page {page}: {e} - retrying in {wait} s", flush=True)
+            time.sleep(wait)
 
 
 def download() -> None:
@@ -100,7 +101,8 @@ def macros(product: dict) -> tuple[float, float, float, float] | None:
     except (KeyError, TypeError, ValueError):
         return None
     kcal, protein, carbs, fat = values
-    if not 0 <= kcal <= 900 or min(protein, carbs, fat) < 0 or protein + carbs + fat > 100:
+    # Under 5 kcal (water, salt, diet soda) adds nothing to calorie tracking, and has no main macro.
+    if not 5 <= kcal <= 900 or min(protein, carbs, fat) < 0 or protein + carbs + fat > 100:
         return None
     # Crowd-sourced data has typos. Energy must roughly match the macros (4/4/9 kcal per gram);
     # a big mismatch means a wrong value somewhere (e.g. kJ entered as kcal).
@@ -135,7 +137,7 @@ def convert(products: list[dict]) -> list[list]:
             serving = float(p.get("serving_quantity") or 0)
         except (TypeError, ValueError):
             serving = 0
-        if 0 < serving < 2000:
+        if 5 <= serving < 2000:  # smaller "servings" are usually typos
             units.append(["מנה", round(serving, 1)])  # the serving printed on the package
         rows.append([int(code), name, kcal, protein, carbs, fat, category(p, protein, carbs, fat), units])
     return rows

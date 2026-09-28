@@ -80,6 +80,8 @@ def test_off_conversion_filters_bad_data():
                                           "carbohydrates_100g": 15, "fat_100g": 2.5}),
         off_product(code="4", nutriments={"energy-kcal_100g": 100, "proteins_100g": 60,
                                           "carbohydrates_100g": 60, "fat_100g": 2.5}),   # > 100 g per 100 g
+        off_product(code="5", nutriments={"energy-kcal_100g": 0, "proteins_100g": 0,
+                                          "carbohydrates_100g": 0, "fat_100g": 0}),      # water, salt
     ]
     assert convert_off(bad) == []
     # The same product listed twice is kept once.
