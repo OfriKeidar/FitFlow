@@ -12,7 +12,7 @@ from fitflow.api.routes import auth, chat, coach, foods, log, users
 from fitflow.db.demo import create_demo_user, demo_exists
 from fitflow.db.migrate import migrate
 from fitflow.db.models import Base
-from fitflow.db.seed import seed_foods
+from fitflow.db.seed import seed_foods, seed_tzameret, tzameret_enabled
 from fitflow.db.session import SessionLocal, engine
 
 
@@ -27,6 +27,8 @@ def init_db() -> None:
     migrate(engine)                    # adds missing columns to existing tables
     with SessionLocal() as db:
         seed_foods(db)
+        if tzameret_enabled() and (added := seed_tzameret(db)):
+            logging.getLogger("fitflow").info("loaded %d foods from the national database", added)
         # On a public demo server, create the demo account visitors can log in with.
         if os.getenv("SEED_DEMO", "").lower() in ("1", "true", "yes") and not demo_exists(db):
             create_demo_user(db)

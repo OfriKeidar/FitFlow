@@ -25,6 +25,10 @@ def _add_column_if_missing(engine: Engine, table: str, column: str, ddl: str) ->
 
 
 def migrate(engine: Engine) -> None:
+    # National food database (which source a food came from, and its code there)
+    _add_column_if_missing(engine, "foods", "source", "VARCHAR(20) NOT NULL DEFAULT 'fitflow'")
+    _add_column_if_missing(engine, "foods", "external_code", "INTEGER")
+
     # Health Connect sync (workout source + id in the source app)
     _add_column_if_missing(engine, "workouts", "source", "VARCHAR(20) NOT NULL DEFAULT 'manual'")
     _add_column_if_missing(engine, "workouts", "external_id", "VARCHAR(200)")

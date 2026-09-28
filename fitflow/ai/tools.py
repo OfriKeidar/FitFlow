@@ -18,12 +18,11 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from pydantic import ValidationError
-from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from fitflow.db import models as db
 from fitflow.domain.activity import ACTIVITIES
-from fitflow.services import actions, coach, tracking
+from fitflow.services import actions, coach, food_search, tracking
 
 # Tool definitions sent to the model. The descriptions matter: they are the model's only
 # documentation of what each tool does and when to use it.
@@ -32,9 +31,11 @@ TOOLS = [
         "name": "search_foods",
         "description": (
             "Search the food database by name (Hebrew). Pass ALL the foods from the user's message in one "
-            "call. Returns, for each query, matching foods with their id, serving size and nutrition per ONE "
-            "serving. Search with the singular base form (e.g. 'ביצה' not 'ביצים'); if nothing matches, "
-            "try a shorter word or a synonym."
+            "call. Returns, for each query, the best matches first, with id, serving size and nutrition per "
+            "ONE serving. Many foods have serving '100 גרם' and a units_grams map of household portions "
+            "(e.g. {'פרוסה בינונית': 34}): for those, servings = total grams / 100 (2 medium slices = 68 g "
+            "= 0.68 servings). Search with the singular base form (e.g. 'ביצה' not 'ביצים'); if nothing "
+            "matches, try a shorter word or a synonym."
         ),
         "input_schema": {
             "type": "object",
@@ -181,15 +182,15 @@ class ToolExecutor:
         return {query: self._search(query) for query in queries[:15]}
 
     def _search(self, query: str) -> list[dict]:
-        words = [w for w in query.split() if w]
-        foods = self.session.scalars(
-            select(db.Food).where(or_(*(db.Food.name.contains(w) for w in words))).limit(10)
-        ) if words else []
-        return [
-            {"food_id": f.id, "name": f.name, "serving": f.serving, "kcal": f.kcal,
-             "protein_g": f.protein_g, "carbs_g": f.carbs_g, "fat_g": f.fat_g}
-            for f in foods
-        ]
+        foods = food_search.search_foods(self.session, query, limit=8, with_units=True)
+        results = []
+        for f in foods:
+            item = {"food_id": f.id, "name": f.name, "serving": f.serving, "kcal": f.kcal,
+                    "protein_g": f.protein_g, "carbs_g": f.carbs_g, "fat_g": f.fat_g}
+            if f.units:  # household portions, so "2 slices" can become grams
+                item["units_grams"] = {u.name: u.grams for u in f.units}
+            results.append(item)
+        return results
 
     def _tool_get_today_status(self) -> dict:
         s = tracking.daily_status(self.session, self.user, self.today)

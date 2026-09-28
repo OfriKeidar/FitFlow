@@ -246,6 +246,21 @@ Samsung Health --(built-in sync)--> Health Connect --> FitFlow Android app --> P
   (a typo like 87 instead of 78), and is otherwise logged as today's weight. Until the TDEE has been learned from
   data, a corrected sex, age, height, activity level or weight also recomputes the formula TDEE.
 
+## The national food database (`scripts/import_tzameret.py`, `services/food_search.py`)
+- **Source:** the Ministry of Health's Tzameret CSVs (foods, household-unit names, unit weights per food).
+  The script converts them once into `fitflow/data/foods_tzameret.json` (~670 KB, 4,508 foods), and the
+  server loads it on first start with two bulk inserts (foods, then ~9,800 units).
+- **Two kinds of food.** Our 39 curated foods have natural servings ("1 large egg"). National foods are
+  per 100 g, plus household units ("כוס" = 240 g). The AI tool returns `units_grams`, so "a cup of
+  shakshuka" becomes servings = grams / 100. On a name collision, our curated version wins.
+- **Ranking, not just matching.** Sorting "contains the query" by name length returned dried egg powder
+  (605 kcal / 100 g) for "ביצה". Search now ranks by: curated first, match quality (exact > prefix >
+  whole word > contains), processed forms (dried, powder, formula) last unless asked for, then length.
+- **Data cleaning found by testing on PostgreSQL rules.** One name was 107 characters, longer than
+  `VARCHAR(100)`. SQLite ignores the limit; PostgreSQL would have failed the whole deploy. It turned
+  out to be a questionnaire (FFQ) row, not a food, so all 116 FFQ rows are filtered, with a length guard.
+- **Tests skip it by default** (`SEED_TZAMERET=false`), and `test_foods.py` loads it explicitly.
+
 ## Database design decisions
 - **Nutrition snapshots.** A log entry copies the food's values at logging time. Fixing a food in
   the database later doesn't silently rewrite the user's history.

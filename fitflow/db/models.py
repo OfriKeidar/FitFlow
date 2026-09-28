@@ -52,6 +52,22 @@ class Food(Base):
     fat_g: Mapped[float]
     category: Mapped[str] = mapped_column(String(20))
     meals: Mapped[str] = mapped_column(String(50))  # comma separated, e.g. "LUNCH,DINNER"
+    # "fitflow": our short list of common foods, with natural servings ("1 large egg").
+    # "tzameret": the national nutrition database - thousands of foods, always per 100 g.
+    source: Mapped[str] = mapped_column(String(20), default="fitflow", server_default="fitflow")
+    external_code: Mapped[int | None] = mapped_column(default=None)  # the food's code in its source
+    units: Mapped[list["FoodUnit"]] = relationship(order_by="FoodUnit.grams")
+
+
+class FoodUnit(Base):
+    """A household portion of a food and its weight, e.g. bread: "פרוסה בינונית" = 34 g.
+    Lets the AI turn "2 slices" into grams instead of guessing."""
+    __tablename__ = "food_units"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    food_id: Mapped[int] = mapped_column(ForeignKey("foods.id"), index=True)
+    name: Mapped[str] = mapped_column(String(40))
+    grams: Mapped[float]
 
 
 class FoodLogEntry(Base):

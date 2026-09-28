@@ -1,9 +1,9 @@
-from fastapi import APIRouter, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, HTTPException, Query
 
 from fitflow.api.deps import DB, CurrentUser
 from fitflow.api.schemas import FoodOut, PantryItemIn, PantryItemOut
 from fitflow.db.models import DislikedFood, Food, PantryItem
+from fitflow.services import food_search
 
 router = APIRouter(tags=["foods"])
 
@@ -16,11 +16,9 @@ def _food_or_404(db: DB, food_id: int) -> Food:
 
 
 @router.get("/foods", response_model=list[FoodOut])
-def search_foods(db: DB, q: str = "", limit: int = 20):
-    query = select(Food).order_by(Food.name).limit(limit)
-    if q:
-        query = query.where(Food.name.contains(q))
-    return db.scalars(query).all()
+def search_foods(db: DB, q: str = "", limit: int = Query(default=20, ge=1, le=50)):
+    """Relevance-ranked search over our common foods and the national database (see food_search.py)."""
+    return food_search.search_foods(db, q, limit)
 
 
 @router.get("/pantry", response_model=list[PantryItemOut])
