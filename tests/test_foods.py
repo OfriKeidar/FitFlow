@@ -112,3 +112,15 @@ def test_whole_word_matches_rank_before_substrings(client, national_db):
     names = [f["name"] for f in client.get("/foods", params={"q": "חלב"}).json()]
     assert names[0] == "חלב 3%"
     assert not any("חלבון" in n or "חלבה" in n for n in names[:10])  # protein, halva: other words
+
+
+def test_a_bigger_file_adds_only_the_new_foods(client, tmp_path):
+    path = tmp_path / "off.json"
+    first = off_product(code="7290000000001", product_name_he="שוקו")
+    second = off_product(code="7290000000002", product_name_he="מעדן וניל")
+    with SessionLocal() as db:
+        path.write_text(json.dumps({"foods": convert_off([first])}), encoding="utf-8")
+        assert seed_food_database(db, "off", path) == 1
+        path.write_text(json.dumps({"foods": convert_off([first, second])}), encoding="utf-8")
+        assert seed_food_database(db, "off", path) == 1  # only the new one
+        assert seed_food_database(db, "off", path) == 0

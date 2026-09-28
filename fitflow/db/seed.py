@@ -41,14 +41,17 @@ def food_databases_enabled() -> bool:
 
 
 def seed_food_database(db: Session, source: str, path: Path | None = None) -> int:
-    """Add one external database once. Foods whose name we already have (e.g. "שמן זית") keep the
-    existing version. Uses bulk inserts: thousands of foods + units in a couple of statements, not one by one."""
+    """Add the foods of one external database that aren't loaded yet (by their code), so a bigger
+    version of the file adds only the new foods on the next start. Foods whose name we already have
+    (e.g. "שמן זית") keep the existing version. Uses bulk inserts: thousands of foods + units in a couple
+    of statements, not one by one."""
     path = path or FOOD_DATABASES[source]
-    if not path.exists() or db.scalar(select(Food.id).where(Food.source == source).limit(1)) is not None:
+    if not path.exists():
         return 0
     data = json.loads(path.read_text(encoding="utf-8"))
+    loaded = set(db.scalars(select(Food.external_code).where(Food.source == source)))
     existing = set(db.scalars(select(Food.name)))
-    rows = [r for r in data["foods"] if r[1] not in existing]
+    rows = [r for r in data["foods"] if r[0] not in loaded and r[1] not in existing]
     if not rows:
         return 0
 
