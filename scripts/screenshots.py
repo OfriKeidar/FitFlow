@@ -22,7 +22,10 @@ from scripts.seed_demo import DEMO_EMAIL
 
 APP_URL = os.getenv("APP_URL", "http://localhost:5173")
 OUT = Path(__file__).resolve().parents[1] / "docs" / "screenshots"
-PAGES = [("today", "/"), ("chat", "/log"), ("meal", "/meal"), ("workouts", "/workouts"), ("progress", "/progress")]
+PAGES = [("today", "/"), ("meal", "/meal"), ("workouts", "/workouts"), ("progress", "/progress"),
+         ("profile", "/profile")]
+# Sent to the AI coach for the chat screenshot: household units ("a cup") resolved via the national database.
+CHAT_MESSAGE = "אכלתי כוס שקשוקה ופרוסת לחם מלא"
 
 
 def main() -> None:
@@ -66,6 +69,21 @@ def main() -> None:
         page.wait_for_timeout(1200)  # the date preview is debounced
         page.screenshot(path=OUT / "onboarding.png")
         print("saved onboarding")
+
+        # The AI coach (needs an LLM key in .env): send a message and wait for the confirmation card.
+        page = phone()
+        page.goto(APP_URL + "/log")
+        page.get_by_placeholder("מה אכלת או עשית היום?").fill(CHAT_MESSAGE)
+        try:
+            with page.expect_response(lambda r: r.url.endswith("/chat"), timeout=120_000):
+                page.get_by_role("button", name="שליחה").click()
+            page.reload()  # show the conversation as a returning user sees it
+            page.get_by_text("ממתינים לאישור").wait_for(timeout=10_000)
+            page.wait_for_timeout(800)
+            page.screenshot(path=OUT / "chat.png")
+            print("saved chat")
+        except Exception:
+            print("chat: no answer from the AI (no key or quota?) - kept the old chat.png")
 
         browser.close()
 
