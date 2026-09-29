@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { api, errorMessage } from '../api/client'
-import type { DailyStatus, FoodLogEntry, Goal, Workout } from '../api/types'
+import type { DailyStatus, FoodLogEntry, Goal, Unit, Workout } from '../api/types'
 import { Icon, type IconName } from '../components/Icon'
 import { Ring } from '../components/Ring'
 import { useApi } from '../hooks/useApi'
@@ -57,7 +57,8 @@ function Greeting({ day }: { day: string }) {
 }
 
 function CalorieCard({ status }: { status: DailyStatus }) {
-  const { target, eaten, remaining, workout_kcal, energy_balance } = status
+  const { target, eaten, remaining, workout_kcal, planned_balance } = status
+  const planned = Math.round(planned_balance)
   const shown = useCountUp(Math.abs(remaining.kcal))
   const over = remaining.kcal < 0
 
@@ -75,9 +76,9 @@ function CalorieCard({ status }: { status: DailyStatus }) {
       <div className="grid-3" style={{ width: '100%', textAlign: 'center' }}>
         <Stat icon="flag" label="יעד" value={Math.round(target.kcal)} />
         <Stat icon="kitchen" label="נאכלו" value={Math.round(eaten.kcal)} />
-        {eaten.kcal > 0
-          // The energy balance only means something once the user has logged food today.
-          ? <Stat icon="scale" label={energy_balance < 0 ? 'גרעון עד כה' : 'עודף עד כה'} value={Math.abs(Math.round(energy_balance))} />
+        {planned !== 0
+          // Why the target is below (or above) what the body burns: the day's planned deficit/surplus.
+          ? <Stat icon="scale" label={planned < 0 ? 'גרעון מתוכנן' : 'עודף מתוכנן'} value={Math.abs(planned)} />
           : <Stat icon="flame" label="אימון" value={Math.round(workout_kcal)} />}
       </div>
     </div>
@@ -191,7 +192,7 @@ function Meals({ status, onChange }: { status: DailyStatus; onChange: () => void
           <EditFood key={e.id} entry={e} onDone={() => { setEditing(null); onChange() }} />
         ) : (
           <button key={e.id} className="row entry-row" onClick={() => setEditing(e.id)}>
-            <span>{e.servings !== 1 ? `${e.servings} × ` : ''}{e.description}</span>
+            <span>{e.description}{amountLabel(e) && <span className="muted"> · {amountLabel(e)}</span>}</span>
             <span className="muted">{Math.round(e.kcal)} קק"ל · {Math.round(e.protein_g)} ח'</span>
           </button>
         ),
@@ -200,29 +201,65 @@ function Meals({ status, onChange }: { status: DailyStatus; onChange: () => void
   )
 }
 
-/** Fix a logged food: change the amount (values scale with it) or type exact values from the label. */
+/** How much was eaten, in the most natural way: "2 × גדולה · 100 גר'" for eggs, "240 גר'" for shakshuka. */
+function amountLabel(e: FoodLogEntry): string {
+  if (e.grams == null) return e.servings !== 1 ? `${e.servings} מנות` : ''
+  const unit = e.units[0] // the food's own portion, if it has one
+  const count = unit ? e.grams / unit.grams : 0
+  if (unit && Number.isInteger(count * 2)) { // whole or half portions
+    const label = `${count} × ${unit.name}`
+    return unit.name.includes('גרם') ? label : `${label} · ${Math.round(e.grams)} גר'`
+  }
+  return `${Math.round(e.grams)} גר'`
+}
+
+const GRAM: Unit = { name: 'גרם', grams: 1 }
+
+/** Fix a logged food: change the amount - in grams or in a portion like "פרוסה" - and the values scale
+ *  with it, or type exact values from the package label. */
 function EditFood({ entry, onDone }: { entry: FoodLogEntry; onDone: () => void }) {
-  const [form, setForm] = useState({
-    servings: entry.servings, kcal: round1(entry.kcal), protein_g: round1(entry.protein_g),
-    carbs_g: round1(entry.carbs_g), fat_g: round1(entry.fat_g),
+  const byWeight = entry.grams != null // foods logged with exact values only have no weight
+  const units = [GRAM, ...entry.units]
+  // Start in the food's own portion when the amount is a whole number of them (2 eggs), else in grams.
+  const natural = entry.units[0]
+  const startUnit = byWeight && natural && Number.isInteger((entry.grams! / natural.grams) * 2) ? natural : GRAM
+  const [unit, setUnit] = useState(startUnit)
+  const [amount, setAmount] = useState(byWeight ? round1(entry.grams! / startUnit.grams) : entry.servings)
+  const [values, setValues] = useState({
+    kcal: round1(entry.kcal), protein_g: round1(entry.protein_g), carbs_g: round1(entry.carbs_g), fat_g: round1(entry.fat_g),
   })
   const [touchedValues, setTouchedValues] = useState(false) // did the user type exact values?
   const [error, setError] = useState<string | null>(null)
 
+  // The amount in the entry's own terms: grams for foods from the database, servings otherwise.
+  const newAmount = byWeight ? amount * unit.grams : amount
+  const oldAmount = byWeight ? entry.grams! : entry.servings
+
   // Changing the amount rescales the values on screen too, so the user sees the effect right away.
-  function setServings(servings: number) {
-    const factor = entry.servings > 0 && servings > 0 ? servings / entry.servings : 1
-    setForm({
-      servings, kcal: round1(entry.kcal * factor), protein_g: round1(entry.protein_g * factor),
+  function setAmountAndScale(value: number) {
+    setAmount(value)
+    const factor = oldAmount > 0 && value > 0 ? (byWeight ? value * unit.grams : value) / oldAmount : 1
+    setValues({
+      kcal: round1(entry.kcal * factor), protein_g: round1(entry.protein_g * factor),
       carbs_g: round1(entry.carbs_g * factor), fat_g: round1(entry.fat_g * factor),
     })
+    setTouchedValues(false)
+    setError(null)
+  }
+
+  // Switching the unit keeps the same weight: 60 g of bread = 2 slices of 30 g.
+  function changeUnit(name: string) {
+    const next = units.find((u) => u.name === name)!
+    setUnit(next)
+    setAmount(round1(newAmount / next.grams))
   }
 
   async function save() {
-    if (!(form.servings > 0)) return setError('הכמות צריכה להיות גדולה מאפס')
+    if (!(newAmount > 0)) return setError('הכמות צריכה להיות גדולה מאפס')
+    const change = byWeight ? { grams: newAmount } : { servings: newAmount }
     try {
-      // Send exact values only if the user typed them; otherwise the server scales by servings.
-      await api.updateFood(entry.id, touchedValues ? form : { servings: form.servings })
+      // Send exact values only if the user typed them; otherwise the server scales by the amount.
+      await api.updateFood(entry.id, touchedValues ? { ...change, ...values } : change)
       onDone()
     } catch (e) {
       setError(errorMessage(e))
@@ -234,22 +271,40 @@ function EditFood({ entry, onDone }: { entry: FoodLogEntry; onDone: () => void }
     onDone()
   }
 
-  const field = (key: 'kcal' | 'protein_g' | 'carbs_g' | 'fat_g', label: string) => (
+  const field = (key: keyof typeof values, label: string) => (
     <label className="field">
       {label}
-      <input className="input" type="number" inputMode="decimal" value={Number.isNaN(form[key]) ? '' : form[key]}
-             onChange={(e) => { setForm({ ...form, [key]: e.target.valueAsNumber }); setTouchedValues(true); setError(null) }} />
+      <input className="input" type="number" inputMode="decimal" value={Number.isNaN(values[key]) ? '' : values[key]}
+             onChange={(e) => { setValues({ ...values, [key]: e.target.valueAsNumber }); setTouchedValues(true); setError(null) }} />
     </label>
   )
 
   return (
     <div className="tile stack pop" style={{ margin: '4px 0' }}>
       <strong style={{ fontWeight: 500 }}>{entry.description}</strong>
-      <label className="field">
-        כמות (מנות)
-        <input className="input" type="number" inputMode="decimal" step={0.5} value={Number.isNaN(form.servings) ? '' : form.servings}
-               onChange={(e) => { setServings(e.target.valueAsNumber); setTouchedValues(false); setError(null) }} />
-      </label>
+      <div className="grid-2">
+        <label className="field">
+          כמות
+          <input className="input" type="number" inputMode="decimal" step={unit === GRAM ? 10 : 0.5}
+                 value={Number.isNaN(amount) ? '' : amount}
+                 onChange={(e) => setAmountAndScale(e.target.valueAsNumber)} />
+        </label>
+        {byWeight ? (
+          <label className="field">
+            יחידה
+            <select className="input" value={unit.name} onChange={(e) => changeUnit(e.target.value)}>
+              {units.map((u) => (
+                <option key={u.name} value={u.name}>
+                  {u === GRAM || u.name.includes('גרם') ? u.name : `${u.name} (${round1(u.grams)} גר')`}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <span className="muted" style={{ alignSelf: 'end', paddingBottom: 12 }}>מנות</span>
+        )}
+      </div>
+      {byWeight && unit !== GRAM && <p className="muted" style={{ fontSize: 12 }}>= {Math.round(newAmount)} גרם</p>}
       <div className="grid-2">
         {field('kcal', 'קלוריות')}
         {field('protein_g', "חלבון (גר')")}

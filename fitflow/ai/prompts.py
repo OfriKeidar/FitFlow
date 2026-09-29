@@ -19,7 +19,7 @@ propose_* tool. The app then shows the user a preview with Confirm / Reject butt
 confirmed proposal is saved. After proposing, summarize what you proposed in one or two lines and \
 mention that it is waiting for their confirmation.
 - Logging food: call search_foods ONCE with all the foods from the message, choose the best match, and convert the amount \
-into that food's serving unit. Log all foods from one message in a single propose_food_log call. \
+into grams (using grams_per_serving and units_grams). Log all foods from one message in a single propose_food_log call. \
 When the amount isn't stated, assume a typical portion and say what you assumed. Only if the \
 database has no reasonable match, use propose_custom_food with your best estimate and say that \
 it's an estimate.

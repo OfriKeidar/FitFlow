@@ -44,10 +44,18 @@ export interface AuthResult {
   user: User
 }
 
+/** A portion and its weight, e.g. { name: 'פרוסה', grams: 30 }. */
+export interface Unit {
+  name: string
+  grams: number
+}
+
 export interface Food {
   id: number
   name: string
   serving: string
+  grams_per_serving: number
+  units: Unit[]
   kcal: number
   protein_g: number
   carbs_g: number
@@ -60,6 +68,8 @@ export interface FoodLogEntry extends Macros {
   day: string
   description: string
   servings: number
+  grams: number | null // null for foods logged with exact values only
+  units: Unit[]        // portions the amount can be edited in, besides grams
 }
 
 export interface Workout {
@@ -82,7 +92,7 @@ export interface DailyStatus {
   eaten: Macros
   remaining: Macros
   workout_kcal: number
-  energy_balance: number
+  planned_balance: number // target - expenditure: negative = planned deficit
   entries: FoodLogEntry[]
   workouts: Workout[]
   target_update: TargetUpdate | null
@@ -120,6 +130,7 @@ export interface WeightPoint {
 
 export interface FoodLogUpdate {
   description?: string
+  grams?: number
   servings?: number
   kcal?: number
   protein_g?: number

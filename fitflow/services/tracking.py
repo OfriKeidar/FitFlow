@@ -37,17 +37,23 @@ def create_user(session: Session, today: date, **fields) -> db.User:
     return user
 
 
+def servings_for(food: db.Food, grams: float) -> float:
+    """Grams -> servings of this food (240 g of a "100 גרם" food = 2.4 servings)."""
+    return grams / food.grams_per_serving
+
+
 def log_food(session: Session, user: db.User, food: db.Food, servings: float, day: date) -> db.FoodLogEntry:
-    return log_custom_food(session, user, food.name, servings, food_macros(food).scale(servings), day, food.id)
+    return log_custom_food(session, user, food.name, servings, food_macros(food).scale(servings), day, food.id,
+                           grams=servings * food.grams_per_serving)
 
 
 def log_custom_food(
     session: Session, user: db.User, description: str, servings: float, total: Macros, day: date,
-    food_id: int | None = None,
+    food_id: int | None = None, grams: float | None = None,
 ) -> db.FoodLogEntry:
     """Log food with explicit totals - used when the food isn't in our database."""
     entry = db.FoodLogEntry(
-        user_id=user.id, day=day, food_id=food_id, description=description, servings=servings,
+        user_id=user.id, day=day, food_id=food_id, description=description, servings=servings, grams=grams,
         kcal=total.kcal, protein_g=total.protein_g, carbs_g=total.carbs_g, fat_g=total.fat_g,
     )
     session.add(entry)
@@ -72,15 +78,22 @@ MACRO_FIELDS = ("kcal", "protein_g", "carbs_g", "fat_g")
 
 
 def update_food_entry(session: Session, entry: db.FoodLogEntry, changes: dict) -> db.FoodLogEntry:
-    """Fix a logged food. New servings scale the values proportionally (2 eggs -> 3 eggs = x1.5),
-    unless the user also typed exact values, which then win."""
-    if "servings" in changes and entry.servings > 0:
+    """Fix a logged food. A new amount (in grams, or in servings) scales the values proportionally
+    (100 g -> 150 g = x1.5), unless the user also typed exact values, which then win."""
+    factor = None
+    if changes.get("grams") and entry.grams:
+        factor = changes["grams"] / entry.grams
+    elif changes.get("servings") and entry.servings > 0:
         factor = changes["servings"] / entry.servings
+    if factor is not None:
+        entry.servings *= factor  # keep the amount in both units consistent
+        entry.grams = entry.grams * factor if entry.grams else None
         for field in MACRO_FIELDS:
             if field not in changes:
                 setattr(entry, field, getattr(entry, field) * factor)
     for field, value in changes.items():
-        setattr(entry, field, value)
+        if field not in ("grams", "servings"):  # already applied above
+            setattr(entry, field, value)
     session.commit()
     return entry
 
@@ -150,7 +163,10 @@ class DailyStatus:
     eaten: Macros
     remaining: Macros
     workout_kcal: float
-    energy_balance: float  # eaten - burned. Negative = deficit, positive = surplus.
+    # The day's PLANNED balance: calorie target - expenditure (workouts count on both sides, so they
+    # cancel). Negative = deficit (cut), positive = surplus (bulk), 0 = maintenance.
+    # Not "eaten - expenditure so far": that compares part of a day's eating to a whole day's burn.
+    planned_balance: float
     entries: list[db.FoodLogEntry]
     workouts: list[db.WorkoutEntry]
 
@@ -168,7 +184,7 @@ def daily_status(session: Session, user: db.User, day: date) -> DailyStatus:
         eaten=eaten,
         remaining=target - eaten,
         workout_kcal=burned_in_workouts,
-        energy_balance=eaten.kcal - (user.tdee + burned_in_workouts),
+        planned_balance=target.kcal - (user.tdee + burned_in_workouts),
         entries=entries,
         workouts=workouts,
     )

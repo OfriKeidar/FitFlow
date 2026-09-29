@@ -184,6 +184,10 @@ src/pages/      Onboarding, Today, Chat, Meal, Workouts, Progress
    annoying on the login screen. All inputs are now 16px.
 5. **Missing API key crashed with a 500.** The SDK raises a `TypeError` when no credentials are
    configured. Now the dependency checks credentials first and returns a clear 503.
+6. **A "deficit so far" that compared half a day to a whole day.** The home screen showed
+   `eaten - (TDEE + workouts)`: today's intake *so far* against the *whole day's* burn. At noon it showed a
+   huge deficit that "shrank" with every meal. It's now the day's **planned** deficit, `target - expenditure`
+   (workouts are on both sides, so they cancel): the number that explains why the target is what it is.
 
 ## Authentication (`services/auth.py`)
 - **Passwords** are stored as a salted **scrypt** hash, never in plain text. scrypt is deliberately slow
@@ -219,8 +223,14 @@ src/pages/      Onboarding, Today, Chat, Meal, Workouts, Progress
   installed app couldn't find it. Both are fixed in `pyproject.toml`.
 
 ## Editing and corrections
-- **Editing a logged food:** a new amount scales the stored values (2 eggs to 3 eggs is x1.5). Values the user
-  types, for example from a package label, override that. Editing a workout recomputes its calories with the
+- **Amounts by weight.** "A serving" is subjective ("a bowl of salad"), and the national databases are per
+  100 g, which made the log read "2.4 x shakshuka (100 g)". Now every food has `grams_per_serving`, an entry
+  stores the amount in **grams**, and household portions ("פרוסה" = 30 g, "גדולה" = 50 g) are just a way to
+  enter grams. Conversions happen only at the edges (input and display) - the same idea as storing times in UTC.
+  The AI proposes grams too, using the listed portion weights instead of guessing. Older entries and foods got
+  their grams on startup (`sync_curated_weights`, `backfill_log_grams`), since the live database predates this.
+- **Editing a logged food:** a new amount (in grams or in a portion) scales the stored values (100 g to 150 g
+  is x1.5). Values the user types, for example from a package label, override that. Editing a workout recomputes its calories with the
   same MET formula used for logging.
 - **Fixing the profile:** a corrected weight replaces the **sign-up** weigh-in if it's still the only one
   (a typo like 87 instead of 78), and is otherwise logged as today's weight. Until the TDEE has been learned from

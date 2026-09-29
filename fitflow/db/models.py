@@ -1,5 +1,6 @@
 """Database tables (SQLAlchemy 2.0 ORM)."""
 
+from dataclasses import dataclass
 from datetime import date, datetime
 
 from sqlalchemy import BigInteger, ForeignKey, String, Text, UniqueConstraint, func
@@ -8,6 +9,13 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
     pass
+
+
+@dataclass(frozen=True)
+class Unit:
+    """A portion and its weight, e.g. ("פרוסה", 30)."""
+    name: str
+    grams: float
 
 
 class User(Base):
@@ -46,6 +54,8 @@ class Food(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     serving: Mapped[str] = mapped_column(String(50))
+    # How many grams ONE serving weighs ("1 large egg" = 50 g). Lets every food be logged by weight.
+    grams_per_serving: Mapped[float] = mapped_column(default=100, server_default="100")
     kcal: Mapped[float]
     protein_g: Mapped[float]
     carbs_g: Mapped[float]
@@ -86,11 +96,26 @@ class FoodLogEntry(Base):
     food_id: Mapped[int | None] = mapped_column(ForeignKey("foods.id"))
     description: Mapped[str] = mapped_column(String(200))
     servings: Mapped[float]
+    # The amount eaten, by weight: the unit shown and edited in the app. None for foods logged
+    # with exact values only (not from the database), where the weight is unknown.
+    grams: Mapped[float | None] = mapped_column(default=None)
     kcal: Mapped[float]
     protein_g: Mapped[float]
     carbs_g: Mapped[float]
     fat_g: Mapped[float]
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    food: Mapped[Food | None] = relationship()
+
+    @property
+    def units(self) -> list[Unit]:
+        """Portions the amount can be edited in, besides grams: the food's own serving ("פרוסה (30 גרם)")
+        unless it's just "100 גרם", then its household units from the national database."""
+        if self.food is None:
+            return []
+        own = [] if self.food.serving.startswith("100 גרם") else [
+            Unit(self.food.serving.removeprefix("1 "), self.food.grams_per_serving)  # "1 גדולה" -> "גדולה"
+        ]
+        return own + [Unit(u.name, u.grams) for u in self.food.units]
 
 
 class WorkoutEntry(Base):

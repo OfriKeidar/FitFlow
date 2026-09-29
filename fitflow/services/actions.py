@@ -26,7 +26,7 @@ from fitflow.services.mappers import food_macros
 
 class FoodItem(BaseModel):
     food_id: int
-    servings: float = Field(gt=0, le=20)
+    grams: float = Field(gt=0, le=5000)
 
 
 class FoodPayload(BaseModel):
@@ -83,9 +83,9 @@ def propose_food(session: Session, user: db.User, day: date, payload: FoodPayloa
         food = session.get(db.Food, item.food_id)
         if food is None:
             raise ActionError(f"food_id {item.food_id} does not exist - use search_foods first")
-        macros = food_macros(food).scale(item.servings)
+        macros = food_macros(food).scale(tracking.servings_for(food, item.grams))
         total = total + macros
-        lines.append(f"{item.servings:g} × {food.name} ({food.serving}): {macros.kcal:.0f} קק\"ל, {macros.protein_g:.0f} גר' חלבון")
+        lines.append(f"{food.name}, {item.grams:g} גרם: {macros.kcal:.0f} קק\"ל, {macros.protein_g:.0f} גר' חלבון")
     return _save(session, user, day, "food", payload, "\n".join(lines)), total
 
 
@@ -131,11 +131,11 @@ def confirm(session: Session, user: db.User, action: db.PendingAction) -> None:
 
     if action.kind == "food":
         # Check every food exists BEFORE logging any, so we never log half a meal.
-        foods = [(session.get(db.Food, item.food_id), item.servings) for item in payload.items]
+        foods = [(session.get(db.Food, item.food_id), item.grams) for item in payload.items]
         if any(food is None for food, _ in foods):
             raise ActionError("one of the foods no longer exists")
-        for food, servings in foods:
-            tracking.log_food(session, user, food, servings, action.day)
+        for food, grams in foods:
+            tracking.log_food(session, user, food, tracking.servings_for(food, grams), action.day)
     elif action.kind == "custom_food":
         total = Macros(payload.kcal, payload.protein_g, payload.carbs_g, payload.fat_g)
         tracking.log_custom_food(session, user, payload.description, 1, total, action.day)

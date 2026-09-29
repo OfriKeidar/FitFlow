@@ -13,10 +13,10 @@ import json
 import os
 from pathlib import Path
 
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, update
 from sqlalchemy.orm import Session
 
-from fitflow.db.models import Food, FoodUnit
+from fitflow.db.models import Food, FoodLogEntry, FoodUnit
 
 # Shipped inside the package (see [tool.setuptools.package-data]), so it works when installed too.
 DATA = Path(__file__).resolve().parent.parent / "data"
@@ -33,6 +33,27 @@ def seed_foods(db: Session) -> int:
     db.add_all(Food(**row | {"meals": ",".join(row["meals"])}) for row in rows)
     db.commit()
     return len(rows)
+
+
+def sync_curated_weights(db: Session) -> None:
+    """Our foods existed before they had a weight per serving: copy it from foods.json on every start,
+    so a database created earlier gets the new values too (idempotent)."""
+    weights = {r["name"]: r["grams_per_serving"] for r in json.loads(FOODS_FILE.read_text(encoding="utf-8"))}
+    for food in db.scalars(select(Food).where(Food.source == "fitflow")):
+        if food.name in weights and food.grams_per_serving != weights[food.name]:
+            food.grams_per_serving = weights[food.name]
+    db.commit()
+
+
+def backfill_log_grams(db: Session) -> None:
+    """Entries logged before weights existed: grams = servings x the food's weight per serving."""
+    weight = select(Food.grams_per_serving).where(Food.id == FoodLogEntry.food_id).scalar_subquery()
+    db.execute(
+        update(FoodLogEntry)
+        .where(FoodLogEntry.grams.is_(None), FoodLogEntry.food_id.is_not(None))
+        .values(grams=FoodLogEntry.servings * weight)
+    )
+    db.commit()
 
 
 def food_databases_enabled() -> bool:

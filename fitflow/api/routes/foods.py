@@ -18,7 +18,7 @@ def _food_or_404(db: DB, food_id: int) -> Food:
 @router.get("/foods", response_model=list[FoodOut])
 def search_foods(db: DB, q: str = "", limit: int = Query(default=20, ge=1, le=50)):
     """Relevance-ranked search over our common foods and the national database (see food_search.py)."""
-    return food_search.search_foods(db, q, limit)
+    return food_search.search_foods(db, q, limit, with_units=True)
 
 
 @router.get("/pantry", response_model=list[PantryItemOut])

@@ -41,3 +41,7 @@ def migrate(engine: Engine) -> None:
     _add_column_if_missing(engine, "foods", "external_code", "BIGINT")
     _widen_to_bigint(engine, "foods", "external_code")  # created as INTEGER before barcodes were stored
 
+    # Logging by weight (grams) instead of servings
+    _add_column_if_missing(engine, "foods", "grams_per_serving", "FLOAT NOT NULL DEFAULT 100")
+    _add_column_if_missing(engine, "food_log", "grams", "FLOAT")
+

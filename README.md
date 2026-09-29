@@ -74,7 +74,7 @@ The core logic is built on classic algorithms from CS courses:
 | **Hash maps / sets** | `workout_stats.py`, `db/seed.py` | Counting the most frequent activity, and O(1) duplicate checks when loading the food database |
 
 ## Stack
-**Backend:** Python 3.11, FastAPI, SQLAlchemy 2, PuLP, Gemini (OpenAI-compatible API) / Anthropic SDK, PyJWT, pytest (130 tests)
+**Backend:** Python 3.11, FastAPI, SQLAlchemy 2, PuLP, Gemini (OpenAI-compatible API) / Anthropic SDK, PyJWT, pytest (138 tests)
 **Frontend:** React 19, TypeScript, Vite, Recharts, a PWA manifest, dark mode
 **Ops:** Docker (multi-stage, non-root), docker-compose with PostgreSQL, GitHub Actions (tests on SQLite *and* PostgreSQL, lint, build, Docker smoke test), Render blueprint
 
@@ -84,7 +84,7 @@ The core logic is built on classic algorithms from CS courses:
 # Backend
 python -m venv .venv
 .venv/Scripts/pip install -e ".[dev]"
-.venv/Scripts/python -m pytest                     # 130 tests
+.venv/Scripts/python -m pytest                     # 138 tests
 .venv/Scripts/python -m scripts.seed_demo           # optional: demo account with 5 weeks of data
 .venv/Scripts/uvicorn fitflow.api.main:app          # API + interactive docs at http://localhost:8000/docs
 

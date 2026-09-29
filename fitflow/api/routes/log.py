@@ -18,7 +18,8 @@ def log_food(body: FoodLogIn, user: CurrentUser, db: DB, today: Today):
     food = db.get(Food, body.food_id)
     if food is None:
         raise HTTPException(404, "Food not found")
-    return tracking.log_food(db, user, food, body.servings, body.day or today)
+    servings = body.servings or tracking.servings_for(food, body.grams)
+    return tracking.log_food(db, user, food, servings, body.day or today)
 
 
 @router.post("/custom-food", response_model=FoodLogOut, status_code=201)

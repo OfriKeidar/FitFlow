@@ -11,7 +11,10 @@ from fitflow.api.routes import auth, chat, coach, foods, log, users
 from fitflow.db.demo import create_demo_user, demo_exists
 from fitflow.db.migrate import migrate
 from fitflow.db.models import Base
-from fitflow.db.seed import FOOD_DATABASES, food_databases_enabled, seed_food_database, seed_foods
+from fitflow.db.seed import (
+    FOOD_DATABASES, backfill_log_grams, food_databases_enabled, seed_food_database, seed_foods,
+    sync_curated_weights,
+)
 from fitflow.db.session import SessionLocal, engine
 
 
@@ -26,9 +29,11 @@ def init_db() -> None:
     migrate(engine)                    # adds missing columns to existing tables
     with SessionLocal() as db:
         seed_foods(db)
+        sync_curated_weights(db)
         for source in FOOD_DATABASES if food_databases_enabled() else ():
             if added := seed_food_database(db, source):
                 logging.getLogger("fitflow").info("loaded %d foods from %s", added, source)
+        backfill_log_grams(db)
         # On a public demo server, create the demo account visitors can log in with.
         if os.getenv("SEED_DEMO", "").lower() in ("1", "true", "yes") and not demo_exists(db):
             create_demo_user(db)

@@ -31,11 +31,11 @@ TOOLS = [
         "name": "search_foods",
         "description": (
             "Search the food database by name (Hebrew). Pass ALL the foods from the user's message in one "
-            "call. Returns, for each query, the best matches first, with id, serving size and nutrition per "
-            "ONE serving. Many foods have serving '100 גרם' and a units_grams map of household portions "
-            "(e.g. {'פרוסה בינונית': 34}): for those, servings = total grams / 100 (2 medium slices = 68 g "
-            "= 0.68 servings). Search with the singular base form (e.g. 'ביצה' not 'ביצים'); if nothing "
-            "matches, try a shorter word or a synonym."
+            "call. Returns, for each query, the best matches first, with id, nutrition per ONE serving, "
+            "grams_per_serving (the weight of one serving) and, when known, units_grams - household portions "
+            "and their weight (e.g. {'פרוסה בינונית': 34}). Use them to turn what the user said into grams "
+            "(2 medium slices = 68 g; 2 eggs = 2 x grams_per_serving). Search with the singular base form "
+            "(e.g. 'ביצה' not 'ביצים'); if nothing matches, try a shorter word or a synonym."
         ),
         "input_schema": {
             "type": "object",
@@ -52,8 +52,9 @@ TOOLS = [
         "name": "propose_food_log",
         "description": (
             "Propose logging foods that exist in the database. Nothing is saved until the user "
-            "confirms in the app. `servings` is in the food's own serving unit (from search_foods), "
-            "e.g. 2 for two eggs when the serving is '1 large'. Returns the nutrition totals."
+            "confirms in the app. `grams` is the total weight eaten of that food, from grams_per_serving "
+            "and units_grams in search_foods (never guess a unit's weight when it's listed). Returns the "
+            "nutrition totals."
         ),
         "input_schema": {
             "type": "object",
@@ -64,9 +65,9 @@ TOOLS = [
                         "type": "object",
                         "properties": {
                             "food_id": {"type": "integer"},
-                            "servings": {"type": "number", "description": "Number of servings, can be fractional"},
+                            "grams": {"type": "number", "description": "Total weight eaten, in grams"},
                         },
-                        "required": ["food_id", "servings"],
+                        "required": ["food_id", "grams"],
                     },
                 },
             },
@@ -185,8 +186,8 @@ class ToolExecutor:
         foods = food_search.search_foods(self.session, query, limit=8, with_units=True)
         results = []
         for f in foods:
-            item = {"food_id": f.id, "name": f.name, "serving": f.serving, "kcal": f.kcal,
-                    "protein_g": f.protein_g, "carbs_g": f.carbs_g, "fat_g": f.fat_g}
+            item = {"food_id": f.id, "name": f.name, "serving": f.serving, "grams_per_serving": f.grams_per_serving,
+                    "kcal": f.kcal, "protein_g": f.protein_g, "carbs_g": f.carbs_g, "fat_g": f.fat_g}
             if f.units:  # household portions, so "2 slices" can become grams
                 item["units_grams"] = {u.name: u.grams for u in f.units}
             results.append(item)
@@ -200,7 +201,7 @@ class ToolExecutor:
             "eaten": _macros(s.eaten),
             "remaining": _macros(s.remaining),
             "workout_kcal": _round(s.workout_kcal),
-            "energy_balance_kcal": _round(s.energy_balance),
+            "planned_balance_kcal": _round(s.planned_balance),  # target - expenditure; negative = deficit
             "logged_foods": [e.description for e in s.entries],
         }
 

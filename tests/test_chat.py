@@ -81,7 +81,7 @@ def test_food_is_proposed_not_logged_until_confirmed(client, user, llm):
     egg = food_id(client, "ביצה")
     llm.script = [
         reply(tool_call("search_foods", {"queries": ["ביצה"]})),
-        reply(tool_call("propose_food_log", {"items": [{"food_id": egg, "servings": 2}]}, "call_2")),
+        reply(tool_call("propose_food_log", {"items": [{"food_id": egg, "grams": 100}]}, "call_2")),
         reply(text("רשמתי 2 ביצים, 144 קק\"ל. מחכה לאישור שלך")),
     ]
     result = chat(client, user, "אכלתי 2 ביצים")
@@ -141,7 +141,7 @@ def test_workout_preview_comes_from_our_formula(client, user, llm):
 
 def test_invalid_tool_input_is_returned_as_error_so_the_model_can_fix_it(client, user, llm):
     llm.script = [
-        reply(tool_call("propose_food_log", {"items": [{"food_id": 99999, "servings": 1}]})),
+        reply(tool_call("propose_food_log", {"items": [{"food_id": 99999, "grams": 100}]})),
         reply(text("לא מצאתי את המזון הזה")),
     ]
     result = chat(client, user, "אכלתי משהו")

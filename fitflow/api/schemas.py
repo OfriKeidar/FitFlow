@@ -115,10 +115,17 @@ class PlanOut(BaseModel):
 
 # --- foods & pantry ---
 
+class FoodUnitOut(ORM):
+    name: str
+    grams: float
+
+
 class FoodOut(ORM):
     id: int
     name: str
     serving: str
+    grams_per_serving: float
+    units: list[FoodUnitOut] = []  # household portions ("פרוסה" = 34 g), where known
     kcal: float
     protein_g: float
     carbs_g: float
@@ -138,9 +145,17 @@ class PantryItemOut(ORM):
 # --- logging ---
 
 class FoodLogIn(BaseModel):
+    """The amount by weight (`grams`), or in the food's own servings (`servings`) - one of them."""
     food_id: int
-    servings: float = Field(gt=0, le=20)
+    grams: float | None = Field(default=None, gt=0, le=5000)
+    servings: float | None = Field(default=None, gt=0, le=20)
     day: date | None = None
+
+    @model_validator(mode="after")
+    def one_amount(self):
+        if (self.grams is None) == (self.servings is None):
+            raise ValueError("send either grams or servings")
+        return self
 
 
 class CustomFoodLogIn(BaseModel):
@@ -153,9 +168,10 @@ class CustomFoodLogIn(BaseModel):
 
 
 class FoodLogUpdate(BaseModel):
-    """Fix a logged entry. Changing only `servings` scales the nutrition values; values sent
-    explicitly (e.g. from the package label) are used as-is."""
+    """Fix a logged entry. Changing only the amount (`grams` or `servings`) scales the nutrition values;
+    values sent explicitly (e.g. from the package label) are used as-is."""
     description: str | None = Field(default=None, min_length=1, max_length=200)
+    grams: float | None = Field(default=None, gt=0, le=5000)
     servings: float | None = Field(default=None, gt=0, le=20)
     kcal: float | None = Field(default=None, ge=0, le=5000)
     protein_g: float | None = Field(default=None, ge=0, le=500)
@@ -173,6 +189,8 @@ class FoodLogOut(ORM):
     day: date
     description: str
     servings: float
+    grams: float | None  # None for foods logged with exact values only
+    units: list[FoodUnitOut]  # portions to edit the amount in, besides grams
     kcal: float
     protein_g: float
     carbs_g: float
@@ -217,7 +235,7 @@ class DailyStatusOut(ORM):
     eaten: MacrosOut
     remaining: MacrosOut
     workout_kcal: float
-    energy_balance: float
+    planned_balance: float  # target - expenditure: negative = planned deficit
     entries: list[FoodLogOut]
     workouts: list[WorkoutOut]
     target_update: TargetUpdateOut | None = None

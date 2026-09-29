@@ -68,7 +68,7 @@ def test_food_flow_with_gemini(client, user, gemini):
     egg = food_id(client, "ביצה")
     gemini.script = [
         completion(tool_calls=[("c1", "search_foods", '{"queries": ["ביצה"]}')]),
-        completion(tool_calls=[("c2", "propose_food_log", json.dumps({"items": [{"food_id": egg, "servings": 2}]}))]),
+        completion(tool_calls=[("c2", "propose_food_log", json.dumps({"items": [{"food_id": egg, "grams": 100}]}))]),
         completion("רשמתי 2 ביצים, מחכה לאישור שלך"),
     ]
     result = chat(client, user, "אכלתי 2 ביצים")
