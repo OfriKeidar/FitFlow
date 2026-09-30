@@ -40,8 +40,11 @@ the database or the LLM provider without touching a single algorithm.
     adds fat. Beginners build muscle fastest, so they get a faster pace (0.25-0.5% a week) than
     intermediate (0.15-0.4%) or advanced lifters (0.1-0.25%). The question appears only when bulking, and
     existing users default to "intermediate", which kept their targets unchanged.
-- **Explaining the goals in the app.** Under the goal choice, a collapsed "מה זה אומר?" explains what a
-  cut and a bulk mean and why the pace is moderate: users who understand the "why" choose better.
+- **Explaining the numbers in the app.** Collapsed explainers (one `Explainer` component) answer "why?" where
+  a user would ask it: under the goal choice ("מה זה אומר?" - what a cut and a bulk mean, and why the pace
+  is moderate), and on the home screen ("איך זה מחושב?" - how *their* target is built, e.g. "burn 2,337 −
+  deficit 671 = 1,666, about 0.61 kg a week"; and why protein, fat and carbs are what they are). Users who
+  understand the "why" choose better and trust the targets.
 - **Reaching the target switches the targets to maintenance** automatically.
 - **Safety limits:** at most 1% of body weight lost per week, and a minimum calorie floor.
 

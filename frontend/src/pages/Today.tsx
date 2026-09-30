@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { api, errorMessage } from '../api/client'
 import type { DailyStatus, FoodLogEntry, Goal, Unit, Workout } from '../api/types'
+import { Explainer } from '../components/Explainer'
 import { Icon, type IconName } from '../components/Icon'
 import { Ring } from '../components/Ring'
 import { useApi } from '../hooks/useApi'
@@ -81,7 +82,39 @@ function CalorieCard({ status }: { status: DailyStatus }) {
           ? <Stat icon="scale" label={planned < 0 ? 'גרעון מתוכנן' : 'עודף מתוכנן'} value={Math.abs(planned)} />
           : <Stat icon="flame" label="אימון" value={Math.round(workout_kcal)} />}
       </div>
+      <div style={{ width: '100%' }}><CalorieExplainer status={status} /></div>
     </div>
+  )
+}
+
+const KCAL_PER_KG = 7700 // mirrors domain/models.py
+const fmt = (n: number) => Math.round(n).toLocaleString('he-IL')
+
+/** "How are these numbers calculated?" - with the user's own numbers, so the target isn't a black box. */
+function CalorieExplainer({ status }: { status: DailyStatus }) {
+  const user = useUser()
+  const { target, workout_kcal, planned_balance } = status
+  const burn = target.kcal - planned_balance - workout_kcal // daily expenditure without workouts
+  const gap = Math.abs(planned_balance)
+  const kgPerWeek = ((gap * 7) / KCAL_PER_KG).toFixed(2)
+  const base = target.kcal - workout_kcal
+
+  const targetText = {
+    cut: `היעד (${fmt(base)}) = השריפה פחות גרעון של ${fmt(gap)} קק"ל, כדי לרדת בערך ${kgPerWeek} ק"ג בשבוע.`,
+    bulk: `היעד (${fmt(base)}) = השריפה ועוד עודף של ${fmt(gap)} קק"ל, כדי לעלות בערך ${kgPerWeek} ק"ג בשבוע.`,
+    maintain: `היעד (${fmt(base)}) שווה לשריפה, כדי לשמור על המשקל.`,
+  }[user.goal]
+
+  return (
+    <Explainer summary="איך זה מחושב?" points={[
+      { icon: 'flame', text: `הגוף שלך שורף בערך ${fmt(burn)} קק"ל ביום. ההערכה מתחילה מנוסחה ומתעדכנת כל שבוע לפי ההתקדמות שלך בפועל.` },
+      { icon: 'flag', text: targetText + (workout_kcal > 0 ? ` האימונים של היום הוסיפו ליעד ${fmt(workout_kcal)} קק"ל.` : '') },
+      { icon: 'kitchen', text: 'נאכלו: כל מה שרשמת ואישרת היום.' },
+      ...(gap > 0 ? [{
+        icon: 'scale' as const,
+        text: `${planned_balance < 0 ? 'גרעון' : 'עודף'} מתוכנן: ההפרש בין היעד לשריפה. זה מה שמזיז את המשקל, כי 7,700 קק"ל הן בערך קילו.`,
+      }] : []),
+    ]} />
   )
 }
 
@@ -101,21 +134,33 @@ const MACROS = [
   { key: 'fat_g', label: 'שומן', color: 'var(--fat)' },
 ] as const
 
+// Protein per kg of body weight, by goal - mirrors domain/energy.py (PROTEIN_G_PER_KG).
+const PROTEIN_PER_KG: Record<Goal, number> = { cut: 2.2, bulk: 1.8, maintain: 1.8 }
+
 function MacroRings({ status }: { status: DailyStatus }) {
+  const user = useUser()
   return (
-    <div className="card grid-3 fade-in" style={{ textAlign: 'center' }}>
-      {MACROS.map((m) => (
-        <div key={m.key} className="stack" style={{ alignItems: 'center', gap: 4 }}>
-          <Ring
-            value={status.eaten[m.key]} max={status.target[m.key]} size={76} stroke={8} color={m.color}
-            label={`${m.label}: ${Math.round(status.eaten[m.key])} מתוך ${Math.round(status.target[m.key])} גרם`}
-          >
-            <div style={{ fontSize: 16, fontWeight: 500 }}>{Math.round(status.eaten[m.key])}</div>
-          </Ring>
-          <div style={{ fontSize: 13 }}>{m.label}</div>
-          <div className="muted" style={{ fontSize: 12 }}>מתוך {Math.round(status.target[m.key])} גר'</div>
-        </div>
-      ))}
+    <div className="card stack fade-in">
+      <div className="grid-3" style={{ textAlign: 'center' }}>
+        {MACROS.map((m) => (
+          <div key={m.key} className="stack" style={{ alignItems: 'center', gap: 4 }}>
+            <Ring
+              value={status.eaten[m.key]} max={status.target[m.key]} size={76} stroke={8} color={m.color}
+              label={`${m.label}: ${Math.round(status.eaten[m.key])} מתוך ${Math.round(status.target[m.key])} גרם`}
+            >
+              <div style={{ fontSize: 16, fontWeight: 500 }}>{Math.round(status.eaten[m.key])}</div>
+            </Ring>
+            <div style={{ fontSize: 13 }}>{m.label}</div>
+            <div className="muted" style={{ fontSize: 12 }}>מתוך {Math.round(status.target[m.key])} גר'</div>
+          </div>
+        ))}
+      </div>
+      <Explainer summary="למה הכמויות האלה?" points={[
+        { color: 'var(--accent)', text: `חלבון: ${PROTEIN_PER_KG[user.goal]} גרם לכל ק"ג משקל גוף. ${user.goal === 'cut'
+          ? 'בחיטוב צריך יותר, כדי לשמור על השריר בזמן הגרעון.' : 'זה מספיק כדי לבנות שריר ולשמור עליו.'}` },
+        { color: 'var(--fat)', text: 'שומן: כרבע מהקלוריות. חשוב להורמונים ולספיגת ויטמינים.' },
+        { color: 'var(--carbs)', text: 'פחמימות: כל מה שנשאר מהיעד. הן הדלק העיקרי לאימונים.' },
+      ]} />
     </div>
   )
 }
