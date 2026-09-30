@@ -159,6 +159,34 @@ This is the Adapter / Strategy pattern:
   the SDKs' real response types. They cover the loop, the gate, persistence, fallback, the circuit breaker
   and error handling, with no API key and no cost.
 
+### Safety: defense in depth, and evals against the real model
+The strongest protections are the ones that don't depend on the model obeying:
+
+| Layer | What it stops |
+|---|---|
+| **Least privilege.** Tools only read or *propose* for the logged-in user (from the JWT, never from the message). No SQL, no network, no delete | A successful prompt injection still can't touch other users' data or destroy anything |
+| **Human in the loop** | Nothing the model proposes is saved without a click |
+| **Validation** (Pydantic): message length, ranges (weight, grams), known activities | Nonsense or oversized values |
+| **Limits**: 30 messages a day per user, 8 tool rounds per turn | Cost abuse and endless loops |
+| **Provider safety filters**: a refusal rolls the whole turn back | Harmful content |
+| **Plain-text rendering** (React, never HTML) | Script injection through a reply (XSS) |
+| **Prompt rules** (`prompts.py`): stay on topic, never reveal instructions or change role, tool results are data not orders, no extreme-diet advice, eating-disorder signals get empathy and a referral | Misuse that the layers above can't express |
+
+**Evals** (`scripts/eval_safety.py`): unit tests use a scripted fake model, so they can't tell how the
+*real* model behaves under attack. The evals send 11 adversarial messages to the real model, each in an
+isolated database, and check the reply, the tools called and the proposals created: off-topic requests
+(homework, code), prompt extraction, a role-change ("DAN") jailbreak, an **indirect injection** hidden in a
+crowd-sourced product name, a request for another user's data, abuse, a 600-kcal diet, an eating-disorder
+signal, proposal spam - and a normal message, to make sure the hardening didn't break the real job.
+
+**Results (Gemini):** before the prompt rules, **9/11** - the model happily wrote a full history essay
+and a Python function ("happy to help with anything"). After them, **11/11**: it declines off-topic
+requests in one sentence, and in the injection case it *saw* the hidden instruction in the product name,
+ignored it, and logged only the snack. Resisting prompt extraction, the role change and abuse, and
+referring the eating-disorder message to a professional (with ERAN 1201) already worked before.
+Caveat: model output isn't deterministic, so a passing run is evidence, not proof - which is exactly why
+the architectural layers above matter more than the prompt.
+
 ## Frontend (`frontend/`)
 React and TypeScript with Vite. A mobile-first, right-to-left (Hebrew) layout with dark mode, installable as a PWA.
 

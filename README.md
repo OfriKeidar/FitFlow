@@ -33,6 +33,7 @@ The LLM turns free text into calls to tested code. It never makes up a number.
 | 🧠 | **Adaptive TDEE**: learns how many calories *you* actually burn | Energy balance + least-squares slope of the weight trend, damped and capped; works with daily, weekly or monthly weigh-ins |
 | 🍽️ | **"What should I eat?"** from what's at home, plus **"fit my meal"** amounts | **Integer Linear Programming** (PuLP/CBC): pantry limits, sensible-meal constraints, weighted macro deviation; **no-good cuts** for alternative suggestions |
 | 💬 | **AI coach**: "I ate 2 eggs and ran for 30 minutes" | Tool-use agent with a hand-written loop; **proposes** entries, and the user **confirms** before anything is saved |
+| 🛡️ | **AI safety**: off-topic requests, prompt injection, extreme diets | Defense in depth (least-privilege tools, human in the loop, validation, limits, prompt rules) and **safety evals against the real model**: 9/11 → 11/11 |
 | 🔌 | **Any LLM**: Gemini (free), Claude, or any OpenAI-style API | Provider adapters; model fallback and a circuit breaker for free-tier quotas and overloads |
 | 📈 | **Weight trend** without the daily water noise | Time-aware EWMA (alpha depends on the gap between weigh-ins) |
 | 🎯 | **Target date**: "you'll reach 70 kg around Nov 26" | Pace as a % of body weight (safe for every body size); the bulking pace depends on training experience; switches to maintenance at the target |
@@ -86,6 +87,7 @@ python -m venv .venv
 .venv/Scripts/pip install -e ".[dev]"
 .venv/Scripts/python -m pytest                     # 142 tests
 .venv/Scripts/python -m scripts.seed_demo           # optional: demo account with 5 weeks of data
+.venv/Scripts/python -m scripts.eval_safety         # optional: AI safety evals against the real model (needs a key)
 .venv/Scripts/uvicorn fitflow.api.main:app          # API + interactive docs at http://localhost:8000/docs
 
 # Frontend (second terminal)
