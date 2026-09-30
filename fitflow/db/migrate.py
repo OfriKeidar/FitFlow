@@ -45,3 +45,6 @@ def migrate(engine: Engine) -> None:
     _add_column_if_missing(engine, "foods", "grams_per_serving", "FLOAT NOT NULL DEFAULT 100")
     _add_column_if_missing(engine, "food_log", "grams", "FLOAT")
 
+    # Training experience (sets the bulking pace)
+    _add_column_if_missing(engine, "users", "experience", "VARCHAR(20) NOT NULL DEFAULT 'intermediate'")
+

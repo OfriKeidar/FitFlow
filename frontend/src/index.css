@@ -148,6 +148,15 @@ label.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; 
 }
 .chip.selected { background: var(--accent-soft); color: var(--accent-text); border-color: var(--accent); }
 
+/* "What does this goal mean?" - a native <details>, collapsed by default */
+.explainer { background: var(--surface-2); border-radius: var(--radius); padding: 10px 12px; font-size: 13px; }
+.explainer summary { cursor: pointer; color: var(--accent-text); font-weight: 500; }
+.explainer[open] summary { margin-bottom: 6px; }
+.explainer ul { margin: 4px 0 0; padding: 0; list-style: none; color: var(--text-2); display: grid; gap: 6px; }
+.explainer li { display: flex; gap: 8px; align-items: flex-start; }
+.explainer-icon { color: var(--accent-text); flex-shrink: 0; line-height: 0; margin-top: 2px; }
+.icon-chip { display: inline-flex; align-items: center; gap: 5px; }
+
 /* ---------- Progress bars ---------- */
 .bar { height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
 .bar > i { display: block; height: 100%; border-radius: 4px; transition: width 0.6s ease-out; }

@@ -3,6 +3,7 @@
 
 export type Goal = 'cut' | 'maintain' | 'bulk'
 export type Pace = 'relaxed' | 'recommended' | 'fast'
+export type Experience = 'beginner' | 'intermediate' | 'advanced' // years of strength training
 export type ActivityLevel = 'sedentary' | 'light' | 'active'
 export type Frequency = 'daily' | 'weekly' | 'monthly'
 export type WorkoutCategory = 'strength' | 'cardio' | 'other'
@@ -24,6 +25,7 @@ export interface UserCreate {
   goal: Goal
   target_weight_kg: number | null // null when maintaining
   pace: Pace
+  experience: Experience
   weigh_in_frequency: Frequency
   weekly_workout_goal: number
 }

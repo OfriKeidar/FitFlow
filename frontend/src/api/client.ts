@@ -2,7 +2,7 @@
 // Components never build URLs or headers themselves; they call these functions.
 
 import type {
-  AuthResult, ChatHistoryItem, ChatReply, DailyStatus, Food, FoodLogEntry, FoodLogUpdate, Goal, Insight,
+  AuthResult, ChatHistoryItem, ChatReply, DailyStatus, Experience, Food, FoodLogEntry, FoodLogUpdate, Goal, Insight,
   MealSuggestion, Pace, PantryItem, PendingAction, Plan, Progress, RegisterData, User, UserUpdate, Week,
   Workout, WorkoutStats,
 } from './types'
@@ -111,8 +111,8 @@ export const api = {
   login: (email: string, password: string) => post<AuthResult>('/auth/login', { email, password }),
   me: () => get<User>('/me'),
   updateMe: (changes: UserUpdate) => patch<User>('/me', changes),
-  planPreview: (goal: Goal, weightKg: number, targetKg: number, pace: Pace) =>
-    get<Plan>(`/plan-preview?goal=${goal}&weight_kg=${weightKg}&target_weight_kg=${targetKg}&pace=${pace}`),
+  planPreview: (goal: Goal, weightKg: number, targetKg: number, pace: Pace, experience: Experience) =>
+    get<Plan>(`/plan-preview?goal=${goal}&weight_kg=${weightKg}&target_weight_kg=${targetKg}&pace=${pace}&experience=${experience}`),
 
   today: () => get<DailyStatus>('/today'),
   deleteFood: (id: number) => del(`/log/food/${id}`),

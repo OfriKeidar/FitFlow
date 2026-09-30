@@ -20,10 +20,18 @@ class Goal(Enum):
 
 
 class Pace(Enum):
-    """How fast the user wants to reach their target weight (see energy.WEEKLY_RATE_PCT)."""
+    """How fast the user wants to reach their target weight (see energy.CUT_RATE_PCT / BULK_RATE_PCT)."""
     RELAXED = "relaxed"
     RECOMMENDED = "recommended"
     FAST = "fast"
+
+
+class Experience(Enum):
+    """Years of consistent strength training. Beginners build muscle fastest, so they can bulk faster
+    without most of the gain being fat (see energy.BULK_RATE_PCT)."""
+    BEGINNER = "beginner"          # under a year
+    INTERMEDIATE = "intermediate"  # 1-3 years
+    ADVANCED = "advanced"          # 3+ years
 
 
 class ActivityLevel(Enum):
@@ -71,6 +79,7 @@ class Profile:
     goal: Goal
     target_weight_kg: float | None = None  # None for "maintain"
     pace: Pace = Pace.RECOMMENDED
+    experience: Experience = Experience.INTERMEDIATE
     weigh_in_frequency: WeighInFrequency = WeighInFrequency.WEEKLY
     weekly_workout_goal: int = 3
 

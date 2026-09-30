@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, errorMessage, logout } from '../api/client'
 import type { ActivityLevel, Frequency, Goal, Pace, User, UserUpdate } from '../api/types'
+import { ExperienceChips } from '../components/ExperienceChips'
+import { GoalExplainer } from '../components/GoalExplainer'
 import { Icon } from '../components/Icon'
 import { useApi } from '../hooks/useApi'
-import { ACTIVITY_LEVELS, FREQUENCY_LABELS, GOAL_LABELS, PACE_LABELS } from '../labels'
+import { ACTIVITY_ICONS, ACTIVITY_LEVELS, FREQUENCY_LABELS, GOAL_LABELS, PACE_LABELS, WORKOUT_GOAL_OPTIONS } from '../labels'
 import { useSetUser, useUser } from '../user'
 
 /** Everything from sign-up can be fixed here - typos in weight or height happen. */
@@ -32,7 +34,8 @@ function ProfileForm({ user, currentWeight, onSaved }: { user: User; currentWeig
   const setUser = useSetUser()
   const [form, setForm] = useState({
     name: user.name, sex: user.sex, age: user.age, height_cm: user.height_cm, weight_kg: currentWeight,
-    goal: user.goal, target_weight_kg: user.target_weight_kg ?? NaN, pace: user.pace, activity: user.activity,
+    goal: user.goal, target_weight_kg: user.target_weight_kg ?? NaN, pace: user.pace, experience: user.experience,
+    activity: user.activity,
     weigh_in_frequency: user.weigh_in_frequency, weekly_workout_goal: user.weekly_workout_goal,
   })
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
@@ -73,6 +76,7 @@ function ProfileForm({ user, currentWeight, onSaved }: { user: User; currentWeig
     const target = form.goal === 'maintain' ? null : form.target_weight_kg
     if (target !== user.target_weight_kg) changes.target_weight_kg = target
     if (form.pace !== user.pace) changes.pace = form.pace
+    if (form.experience !== user.experience) changes.experience = form.experience
     if (form.activity !== user.activity) changes.activity = form.activity
     if (form.weigh_in_frequency !== user.weigh_in_frequency) changes.weigh_in_frequency = form.weigh_in_frequency
     if (form.weekly_workout_goal !== user.weekly_workout_goal) changes.weekly_workout_goal = form.weekly_workout_goal
@@ -97,7 +101,7 @@ function ProfileForm({ user, currentWeight, onSaved }: { user: User; currentWeig
   return (
     <div className="stack" style={{ gap: 14 }}>
       <div className="card stack">
-        <h2>פרטים אישיים</h2>
+        <h2 className="row" style={{ gap: 6, justifyContent: 'flex-start' }}><Icon name="user" /> פרטים אישיים</h2>
         <label className="field">
           שם
           <input className="input" value={form.name} maxLength={40} onChange={(e) => update({ name: e.target.value })} />
@@ -120,7 +124,7 @@ function ProfileForm({ user, currentWeight, onSaved }: { user: User; currentWeig
       </div>
 
       <div className="card stack">
-        <h2>המטרה</h2>
+        <h2 className="row" style={{ gap: 6, justifyContent: 'flex-start' }}><Icon name="flag" /> המטרה</h2>
         <div className="chips">
           {(Object.keys(GOAL_LABELS) as Goal[]).map((goal) => (
             <button key={goal} className={`chip ${form.goal === goal ? 'selected' : ''}`} onClick={() => update({ goal })}>
@@ -128,9 +132,17 @@ function ProfileForm({ user, currentWeight, onSaved }: { user: User; currentWeig
             </button>
           ))}
         </div>
+        <GoalExplainer goal={form.goal} />
         {form.goal !== 'maintain' && (
           <>
             {number('target_weight_kg', 'משקל יעד (ק"ג)', 0.5)}
+            {form.goal === 'bulk' && (
+              <>
+                <p className="muted">ניסיון באימוני כוח (קובע את קצב המסה)</p>
+                <ExperienceChips value={form.experience} onChange={(experience) => update({ experience })} />
+              </>
+            )}
+            <p className="muted">קצב</p>
             <div className="chips">
               {(Object.keys(PACE_LABELS) as Pace[]).map((pace) => (
                 <button key={pace} className={`chip ${form.pace === pace ? 'selected' : ''}`} onClick={() => update({ pace })}>
@@ -143,11 +155,11 @@ function ProfileForm({ user, currentWeight, onSaved }: { user: User; currentWeig
       </div>
 
       <div className="card stack">
-        <h2>שגרה</h2>
+        <h2 className="row" style={{ gap: 6, justifyContent: 'flex-start' }}><Icon name="calendar" /> שגרה</h2>
         <div className="chips">
           {(Object.keys(ACTIVITY_LEVELS) as ActivityLevel[]).map((a) => (
-            <button key={a} className={`chip ${form.activity === a ? 'selected' : ''}`} onClick={() => update({ activity: a })}>
-              {ACTIVITY_LEVELS[a].title}
+            <button key={a} className={`chip icon-chip ${form.activity === a ? 'selected' : ''}`} onClick={() => update({ activity: a })}>
+              <Icon name={ACTIVITY_ICONS[a]} size={14} /> {ACTIVITY_LEVELS[a].title}
             </button>
           ))}
         </div>
@@ -161,7 +173,7 @@ function ProfileForm({ user, currentWeight, onSaved }: { user: User; currentWeig
         </div>
         <p className="muted">יעד אימונים בשבוע</p>
         <div className="chips">
-          {[2, 3, 4, 5, 6].map((n) => (
+          {WORKOUT_GOAL_OPTIONS.map((n) => (
             <button key={n} className={`chip ${form.weekly_workout_goal === n ? 'selected' : ''}`} onClick={() => update({ weekly_workout_goal: n })}>
               {n}
             </button>

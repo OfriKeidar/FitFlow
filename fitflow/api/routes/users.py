@@ -4,10 +4,10 @@ from fastapi import APIRouter, HTTPException, Query
 
 from fitflow.api.deps import DB, CurrentUser, Today
 from fitflow.api.schemas import (
-    GoalName, PaceName, PlanOut, UserOut, UserUpdate, check_target,
+    ExperienceName, GoalName, PaceName, PlanOut, UserOut, UserUpdate, check_target,
 )
 from fitflow.domain.energy import initial_tdee
-from fitflow.domain.models import ActivityLevel, Goal, Pace, Profile, Sex
+from fitflow.domain.models import ActivityLevel, Experience, Goal, Pace, Profile, Sex
 from fitflow.services import coach, tracking
 
 router = APIRouter(tags=["users"])
@@ -52,11 +52,12 @@ def plan_preview(
     weight_kg: float = Query(ge=35, le=300),
     target_weight_kg: float | None = Query(default=None, ge=35, le=300),
     pace: PaceName = "recommended",
+    experience: ExperienceName = "intermediate",
 ):
     """Used by onboarding to show "you'll reach your target around <date>" before signing up."""
-    # Only weight, goal, target and pace affect the plan; the other fields are placeholders.
+    # Only weight, goal, target, pace and experience affect the plan; the other fields are placeholders.
     profile = Profile(
         sex=Sex.MALE, age=30, height_cm=175, weight_kg=weight_kg, activity=ActivityLevel.SEDENTARY,
-        goal=Goal(goal), target_weight_kg=target_weight_kg, pace=Pace(pace),
+        goal=Goal(goal), target_weight_kg=target_weight_kg, pace=Pace(pace), experience=Experience(experience),
     )
     return PlanOut(**asdict(coach.plan_for(profile, today)))

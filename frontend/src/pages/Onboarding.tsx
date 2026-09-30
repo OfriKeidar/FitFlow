@@ -3,14 +3,15 @@ import { ApiError, api, errorMessage } from '../api/client'
 import type { ActivityLevel, AuthResult, Frequency, Goal, Pace, Plan, UserCreate } from '../api/types'
 import { Icon, type IconName } from '../components/Icon'
 import { Loader, Logo } from '../components/Logo'
-import { ACTIVITY_LEVELS, FREQUENCY_LABELS, PACE_LABELS, formatDate } from '../labels'
+import { ExperienceChips } from '../components/ExperienceChips'
+import { GoalExplainer } from '../components/GoalExplainer'
+import { ACTIVITY_ICONS, ACTIVITY_LEVELS, FREQUENCY_LABELS, PACE_LABELS, WORKOUT_GOAL_OPTIONS, formatDate } from '../labels'
 
 const GOALS: { id: Goal; title: string; sub: string; icon: IconName; color: string }[] = [
   { id: 'cut', title: 'חיטוב', sub: 'לרדת בשומן ולשמור על השריר', icon: 'trendDown', color: '#D85A30' },
   { id: 'bulk', title: 'מסה', sub: 'לעלות במסת שריר בעודף מבוקר', icon: 'trendUp', color: '#1D9E75' },
   { id: 'maintain', title: 'שמירה', sub: 'לשמור על המשקל הנוכחי', icon: 'equal', color: '#888780' },
 ]
-const ACTIVITY_ICONS: Record<ActivityLevel, IconName> = { sedentary: 'user', light: 'run', active: 'barbell' }
 const STEPS = 4
 
 interface Props {
@@ -22,7 +23,7 @@ export function Onboarding({ onDone, onLogin }: Props) {
   const [step, setStep] = useState(1)
   const [form, setForm] = useState<UserCreate>({
     name: '', sex: 'male', age: 25, height_cm: 175, weight_kg: 75,
-    activity: 'sedentary', goal: 'cut', target_weight_kg: 70, pace: 'recommended',
+    activity: 'sedentary', goal: 'cut', target_weight_kg: 70, pace: 'recommended', experience: 'intermediate',
     weigh_in_frequency: 'weekly', weekly_workout_goal: 3,
   })
   const [account, setAccount] = useState({ email: '', password: '' })
@@ -121,6 +122,7 @@ export function Onboarding({ onDone, onLogin }: Props) {
               </span>
             </button>
           ))}
+          <GoalExplainer goal={form.goal} />
           {form.goal !== 'maintain' && <TargetPicker form={form} update={update} />}
         </>
       )}
@@ -148,7 +150,7 @@ export function Onboarding({ onDone, onLogin }: Props) {
           </div>
           <p className="muted">כמה אימונים בשבוע תרצה לעשות?</p>
           <div className="chips">
-            {[2, 3, 4, 5, 6].map((n) => (
+            {WORKOUT_GOAL_OPTIONS.map((n) => (
               <button key={n} className={`chip ${form.weekly_workout_goal === n ? 'selected' : ''}`} onClick={() => update({ weekly_workout_goal: n })}>
                 {n}
               </button>
@@ -211,10 +213,11 @@ function TargetPicker({ form, update }: { form: UserCreate; update: (p: Partial<
     if (!valid) return
     // Debounce: wait until the user stops typing before asking the server.
     const timer = setTimeout(() => {
-      api.planPreview(form.goal, form.weight_kg, form.target_weight_kg!, form.pace).then(setPlan).catch(() => setPlan(null))
+      api.planPreview(form.goal, form.weight_kg, form.target_weight_kg!, form.pace, form.experience)
+        .then(setPlan).catch(() => setPlan(null))
     }, 300)
     return () => clearTimeout(timer)
-  }, [valid, form.goal, form.weight_kg, form.target_weight_kg, form.pace])
+  }, [valid, form.goal, form.weight_kg, form.target_weight_kg, form.pace, form.experience])
 
   return (
     <div className="card stack">
@@ -222,6 +225,12 @@ function TargetPicker({ form, update }: { form: UserCreate; update: (p: Partial<
         label='משקל יעד (ק"ג)' value={form.target_weight_kg ?? NaN} step={0.5}
         onChange={(target_weight_kg) => update({ target_weight_kg })}
       />
+      {form.goal === 'bulk' && (
+        <>
+          <p className="muted">כמה זמן אתה מתאמן כוח? מתחילים בונים שריר מהר יותר, אז הקצב מותאם לזה.</p>
+          <ExperienceChips value={form.experience} onChange={(experience) => update({ experience })} />
+        </>
+      )}
       <p className="muted">באיזה קצב?</p>
       <div className="chips">
         {(Object.keys(PACE_LABELS) as Pace[]).map((pace) => (

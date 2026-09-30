@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_serializer, m
 Sex = Literal["male", "female"]
 GoalName = Literal["cut", "maintain", "bulk"]
 PaceName = Literal["relaxed", "recommended", "fast"]
+ExperienceName = Literal["beginner", "intermediate", "advanced"]
 ActivityName = Literal["sedentary", "light", "active"]
 Frequency = Literal["daily", "weekly", "monthly"]
 
@@ -39,6 +40,7 @@ class UserCreate(BaseModel):
     goal: GoalName
     target_weight_kg: float | None = Field(default=None, ge=35, le=300)
     pace: PaceName = "recommended"
+    experience: ExperienceName = "intermediate"
     weigh_in_frequency: Frequency = "weekly"
     weekly_workout_goal: int = Field(default=3, ge=0, le=14)
 
@@ -80,6 +82,7 @@ class UserUpdate(BaseModel):
     goal: GoalName | None = None
     target_weight_kg: float | None = Field(default=None, ge=35, le=300)
     pace: PaceName | None = None
+    experience: ExperienceName | None = None
     activity: ActivityName | None = None
     weigh_in_frequency: Frequency | None = None
     weekly_workout_goal: int | None = Field(default=None, ge=0, le=14)
@@ -96,6 +99,7 @@ class UserOut(ORM):
     goal: GoalName
     target_weight_kg: float | None
     pace: PaceName
+    experience: ExperienceName
     weigh_in_frequency: Frequency
     weekly_workout_goal: int
     tdee: float

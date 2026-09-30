@@ -1,6 +1,6 @@
 // Hebrew display labels for values that the API sends as English identifiers.
 
-import type { ActivityLevel, Frequency, Goal, Pace, WorkoutCategory } from './api/types'
+import type { ActivityLevel, Experience, Frequency, Goal, Pace, WorkoutCategory } from './api/types'
 import type { IconName } from './components/Icon'
 
 export const GOAL_LABELS: Record<Goal, string> = {
@@ -9,17 +9,56 @@ export const GOAL_LABELS: Record<Goal, string> = {
   maintain: 'שמירה',
 }
 
+// What each goal means, shown under "מה זה אומר?" when choosing it - users who understand why the pace is
+// moderate and protein is high make better choices (and trust the targets more).
+export const GOAL_EXPLANATIONS: Record<Goal, { aim: string; points: { icon: IconName; text: string }[] }> = {
+  cut: {
+    aim: 'המטרה: להוריד שומן ולשמור על השריר.',
+    points: [
+      { icon: 'flame', text: 'אוכלים קצת פחות ממה שהגוף שורף (גרעון), והגוף משלים את החסר משומן.' },
+      { icon: 'scale', text: 'גרעון גדול מדי או מעט חלבון גורמים לגוף לפרק גם שריר.' },
+      { icon: 'barbell', text: 'לכן: קצב מתון, הרבה חלבון והמשך אימוני כוח, כדי שמה שיורד יהיה בעיקר שומן.' },
+    ],
+  },
+  bulk: {
+    aim: 'המטרה: לבנות שריר.',
+    points: [
+      { icon: 'kitchen', text: 'אוכלים קצת יותר ממה שהגוף שורף (עודף), כדי שיהיו לגוף חומרי בניין ואנרגיה לאימונים.' },
+      { icon: 'clock', text: 'הגוף בונה שריר לאט, ומה שנאכל מעבר לזה נאגר כשומן.' },
+      { icon: 'barbell', text: 'לכן: עודף קטן ומבוקר. קצת שומן הוא מחיר מקובל, ומורידים אותו אחר כך בחיטוב.' },
+    ],
+  },
+  maintain: {
+    aim: 'המטרה: לשמור על המשקל.',
+    points: [
+      { icon: 'equal', text: 'אוכלים בערך כמו שהגוף שורף.' },
+      { icon: 'arrows', text: 'מתאים בין תקופות של חיטוב ומסה, או כשרוצים להתחזק בלי לשנות משקל.' },
+    ],
+  },
+}
+
 export const ACTIVITY_LEVELS: Record<ActivityLevel, { title: string; sub: string }> = {
   sedentary: { title: 'לא פעיל', sub: 'רוב היום בישיבה, למשל עבודה מול מחשב' },
   light: { title: 'פעיל קלות', sub: 'הרבה הליכה או עמידה במהלך היום' },
   active: { title: 'פעיל מאוד', sub: 'עבודה פיזית רוב היום' },
 }
 
+export const ACTIVITY_ICONS: Record<ActivityLevel, IconName> = { sedentary: 'user', light: 'run', active: 'barbell' }
+
 export const PACE_LABELS: Record<Pace, string> = {
   relaxed: 'רגוע',
   recommended: 'מומלץ',
   fast: 'מהיר',
 }
+
+// Training experience sets how fast a bulk can go: beginners build muscle fastest.
+export const EXPERIENCE_LABELS: Record<Experience, { title: string; sub: string }> = {
+  beginner: { title: 'מתחיל', sub: 'פחות משנה של אימוני כוח' },
+  intermediate: { title: 'בינוני', sub: 'שנה עד 3 שנים' },
+  advanced: { title: 'מתקדם', sub: 'יותר מ־3 שנים' },
+}
+
+export const WORKOUT_GOAL_OPTIONS = [1, 2, 3, 4, 5, 6]
 
 export const FREQUENCY_LABELS: Record<Frequency, string> = {
   daily: 'כל יום',

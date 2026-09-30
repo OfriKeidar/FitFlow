@@ -252,3 +252,20 @@ def test_a_logged_food_offers_its_natural_portion_as_a_unit(client, user):
     assert egg["units"] == [{"name": "גדולה", "grams": 50}]  # "1 גדולה" -> "גדולה"
     rice = client.post("/log/food", headers=user, json={"food_id": food_id(client, "אורז לבן"), "grams": 100}).json()
     assert rice["units"] == []  # "100 גרם מבושל": grams already say it
+
+
+def test_training_experience_changes_the_bulk_plan(client):
+    def weekly_rate(experience):
+        return client.get("/plan-preview", params={
+            "goal": "bulk", "weight_kg": 80, "target_weight_kg": 85, "experience": experience,
+        }).json()["weekly_rate_kg"]
+    assert weekly_rate("beginner") > weekly_rate("intermediate") > weekly_rate("advanced")
+
+
+def test_experience_is_saved_and_editable(client, user):
+    assert client.get("/me", headers=user).json()["experience"] == "intermediate"  # the default
+    assert client.patch("/me", headers=user, json={"experience": "beginner"}).json()["experience"] == "beginner"
+
+
+def test_one_workout_a_week_is_a_valid_goal(client, user):
+    assert client.patch("/me", headers=user, json={"weekly_workout_goal": 1}).json()["weekly_workout_goal"] == 1

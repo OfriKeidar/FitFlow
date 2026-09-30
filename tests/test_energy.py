@@ -3,7 +3,7 @@ import pytest
 from fitflow.domain.energy import (
     bmr, daily_calorie_target, daily_targets, initial_tdee, weekly_rate_kg, weeks_to_target,
 )
-from fitflow.domain.models import ActivityLevel, Goal, Pace, Profile, Sex
+from fitflow.domain.models import ActivityLevel, Experience, Goal, Pace, Profile, Sex
 
 
 def make_profile(**overrides) -> Profile:
@@ -67,3 +67,13 @@ def test_workout_calories_raise_todays_target():
     with_workout = daily_targets(make_profile(), tdee=2500, workout_kcal=300)
     assert with_workout.kcal - base.kcal == pytest.approx(300)
 
+
+
+def test_bulk_pace_depends_on_training_experience():
+    # Beginners build muscle fastest, so they may gain faster without most of it being fat.
+    bulk = dict(goal=Goal.BULK, target_weight_kg=90)
+    rates = [weekly_rate_kg(make_profile(**bulk, experience=e))
+             for e in (Experience.BEGINNER, Experience.INTERMEDIATE, Experience.ADVANCED)]
+    assert rates == pytest.approx([0.28, 0.2, 0.12])  # 0.35%, 0.25%, 0.15% of 80 kg
+    # The cut rate doesn't depend on experience.
+    assert weekly_rate_kg(make_profile(experience=Experience.BEGINNER)) == weekly_rate_kg(make_profile())

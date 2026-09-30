@@ -33,6 +33,7 @@ class User(Base):
     goal: Mapped[str] = mapped_column(String(20))
     target_weight_kg: Mapped[float | None] = mapped_column(default=None)
     pace: Mapped[str] = mapped_column(String(20), default="recommended")
+    experience: Mapped[str] = mapped_column(String(20), default="intermediate", server_default="intermediate")
     weigh_in_frequency: Mapped[str] = mapped_column(String(10), default="weekly")
     weekly_workout_goal: Mapped[int] = mapped_column(default=3)
 

@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { api, errorMessage } from '../api/client'
 import type { PendingAction } from '../api/types'
-import { Icon } from './Icon'
+import { Icon, type IconName } from './Icon'
 
-const TITLES: Record<PendingAction['kind'], string> = {
-  food: 'רישום אוכל',
-  custom_food: 'רישום אוכל (הערכה)',
-  workout: 'רישום אימון',
-  weight: 'רישום שקילה',
+const TITLES: Record<PendingAction['kind'], { title: string; icon: IconName }> = {
+  food: { title: 'רישום אוכל', icon: 'kitchen' },
+  custom_food: { title: 'רישום אוכל (הערכה)', icon: 'kitchen' },
+  workout: { title: 'רישום אימון', icon: 'run' },
+  weight: { title: 'רישום שקילה', icon: 'scale' },
 }
 
 interface Props {
@@ -41,7 +41,12 @@ export function ActionCard({ action, onResolved }: Props) {
   return (
     <div className="card fade-in" style={{ borderColor: status === 'pending' ? 'var(--accent)' : undefined }}>
       <div className="row" style={{ marginBottom: 6 }}>
-        <strong style={{ fontWeight: 500 }}>{TITLES[action.kind]}</strong>
+        <strong className="row" style={{ fontWeight: 500, gap: 6 }}>
+          <span className="stat-icon" style={{ background: 'var(--accent-soft)', color: 'var(--accent-text)' }}>
+            <Icon name={TITLES[action.kind].icon} size={18} />
+          </span>
+          {TITLES[action.kind].title}
+        </strong>
         {status === 'confirmed' && <span className="pop" style={{ color: 'var(--accent)' }}><Icon name="check" /> נרשם</span>}
         {status === 'rejected' && <span className="muted">בוטל</span>}
       </div>

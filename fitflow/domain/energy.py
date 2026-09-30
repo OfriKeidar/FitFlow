@@ -6,14 +6,19 @@ guess with the user's real expenditure, learned from their own data.
 
 import math
 
-from fitflow.domain.models import KCAL_PER_KG, Goal, Macros, Pace, Profile, Sex
+from fitflow.domain.models import KCAL_PER_KG, Experience, Goal, Macros, Pace, Profile, Sex
 
 # Weekly weight change as a share of body weight. Percentages (not fixed kg) keep the pace
-# safe for every body size: 1%/week is the usual upper limit for losing fat without losing muscle,
-# and lean bulking beyond ~0.4%/week mostly adds fat.
-WEEKLY_RATE_PCT = {
-    Goal.CUT: {Pace.RELAXED: 0.005, Pace.RECOMMENDED: 0.0075, Pace.FAST: 0.01},
-    Goal.BULK: {Pace.RELAXED: 0.0015, Pace.RECOMMENDED: 0.0025, Pace.FAST: 0.004},
+# safe for every body size.
+# Cut: 0.5-1%/week is the usual range for losing fat while keeping muscle (Helms et al., 2014).
+CUT_RATE_PCT = {Pace.RELAXED: 0.005, Pace.RECOMMENDED: 0.0075, Pace.FAST: 0.01}
+# Bulk: muscle can only be built so fast, and a bigger surplus mostly adds fat. How fast depends on
+# training experience - beginners gain muscle fastest (roughly 1-2% of body weight a month, falling to
+# ~0.5% for advanced lifters; Iraki et al., 2019). "Fast" for a beginner fits "hard gainers" too.
+BULK_RATE_PCT = {
+    Experience.BEGINNER: {Pace.RELAXED: 0.0025, Pace.RECOMMENDED: 0.0035, Pace.FAST: 0.005},
+    Experience.INTERMEDIATE: {Pace.RELAXED: 0.0015, Pace.RECOMMENDED: 0.0025, Pace.FAST: 0.004},
+    Experience.ADVANCED: {Pace.RELAXED: 0.001, Pace.RECOMMENDED: 0.0015, Pace.FAST: 0.0025},
 }
 MIN_KCAL = {Sex.MALE: 1500, Sex.FEMALE: 1200}  # safety floor
 
@@ -50,7 +55,9 @@ def weekly_rate_kg(profile: Profile) -> float:
     """How many kg per week to lose or gain (always positive). 0 when maintaining or at target."""
     if profile.goal == Goal.MAINTAIN or target_reached(profile):
         return 0.0
-    return profile.weight_kg * WEEKLY_RATE_PCT[profile.goal][profile.pace]
+    if profile.goal == Goal.CUT:
+        return profile.weight_kg * CUT_RATE_PCT[profile.pace]
+    return profile.weight_kg * BULK_RATE_PCT[profile.experience][profile.pace]
 
 
 def weeks_to_target(profile: Profile) -> int | None:

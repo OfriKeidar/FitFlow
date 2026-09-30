@@ -33,8 +33,15 @@ the database or the LLM provider without touching a single algorithm.
 - Calorie target = TDEE +/- (weekly rate x 7700 / 7). Losing 0.5 kg/week = a 550 kcal daily deficit.
 - Macros: protein by body weight, fat as 25% of calories, carbs fill the rest.
 - Goals: cut, maintain or bulk, with a **target weight** and a pace (relaxed / recommended / fast).
-- **The pace is a share of body weight** (cut: 0.5-1% per week, bulk: 0.15-0.4%), not a fixed number
-  of kg, so it's safe for every body size. The app shows the estimated date the target is reached.
+- **The pace is a share of body weight**, not a fixed number of kg, so it's safe for every body size.
+  The app shows the estimated date the target is reached.
+  - **Cut:** 0.5-1% per week, the usual range for losing fat while keeping muscle (Helms et al., 2014).
+  - **Bulk depends on training experience.** Muscle can only be built so fast, and a bigger surplus mostly
+    adds fat. Beginners build muscle fastest, so they get a faster pace (0.25-0.5% a week) than
+    intermediate (0.15-0.4%) or advanced lifters (0.1-0.25%). The question appears only when bulking, and
+    existing users default to "intermediate", which kept their targets unchanged.
+- **Explaining the goals in the app.** Under the goal choice, a collapsed "מה זה אומר?" explains what a
+  cut and a bulk mean and why the pace is moderate: users who understand the "why" choose better.
 - **Reaching the target switches the targets to maintenance** automatically.
 - **Safety limits:** at most 1% of body weight lost per week, and a minimum calorie floor.
 

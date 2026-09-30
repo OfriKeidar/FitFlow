@@ -35,7 +35,7 @@ The LLM turns free text into calls to tested code. It never makes up a number.
 | 💬 | **AI coach**: "I ate 2 eggs and ran for 30 minutes" | Tool-use agent with a hand-written loop; **proposes** entries, and the user **confirms** before anything is saved |
 | 🔌 | **Any LLM**: Gemini (free), Claude, or any OpenAI-style API | Provider adapters; model fallback and a circuit breaker for free-tier quotas and overloads |
 | 📈 | **Weight trend** without the daily water noise | Time-aware EWMA (alpha depends on the gap between weigh-ins) |
-| 🎯 | **Target date**: "you'll reach 70 kg around Nov 26" | Pace as a % of body weight (safe for every body size); switches to maintenance at the target |
+| 🎯 | **Target date**: "you'll reach 70 kg around Nov 26" | Pace as a % of body weight (safe for every body size); the bulking pace depends on training experience; switches to maintenance at the target |
 | 🥗 | **5,000+ Israeli foods**: generic foods with household units ("1 slice"), plus branded products (Tnuva, Osem...) | The Ministry of Health's national database + Open Food Facts, imported and cleaned by scripts; relevance-ranked search, so "egg" finds a fresh egg, not egg powder |
 | 🔍 | **Insights** like "you eat 544 kcal more on weekends" | Statistics with minimum-data and minimum-effect thresholds, so it doesn't report noise |
 | 🔐 | **Auth** | scrypt password hashing, stateless JWT, same error for unknown email and wrong password |
@@ -74,7 +74,7 @@ The core logic is built on classic algorithms from CS courses:
 | **Hash maps / sets** | `workout_stats.py`, `db/seed.py` | Counting the most frequent activity, and O(1) duplicate checks when loading the food database |
 
 ## Stack
-**Backend:** Python 3.11, FastAPI, SQLAlchemy 2, PuLP, Gemini (OpenAI-compatible API) / Anthropic SDK, PyJWT, pytest (138 tests)
+**Backend:** Python 3.11, FastAPI, SQLAlchemy 2, PuLP, Gemini (OpenAI-compatible API) / Anthropic SDK, PyJWT, pytest (142 tests)
 **Frontend:** React 19, TypeScript, Vite, Recharts, a PWA manifest, dark mode
 **Ops:** Docker (multi-stage, non-root), docker-compose with PostgreSQL, GitHub Actions (tests on SQLite *and* PostgreSQL, lint, build, Docker smoke test), Render blueprint
 
@@ -84,7 +84,7 @@ The core logic is built on classic algorithms from CS courses:
 # Backend
 python -m venv .venv
 .venv/Scripts/pip install -e ".[dev]"
-.venv/Scripts/python -m pytest                     # 138 tests
+.venv/Scripts/python -m pytest                     # 142 tests
 .venv/Scripts/python -m scripts.seed_demo           # optional: demo account with 5 weeks of data
 .venv/Scripts/uvicorn fitflow.api.main:app          # API + interactive docs at http://localhost:8000/docs
 

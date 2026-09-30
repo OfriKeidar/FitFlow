@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, errorMessage } from '../api/client'
 import type { PendingAction } from '../api/types'
 import { ActionCard } from '../components/ActionCard'
-import { Icon } from '../components/Icon'
+import { Icon, type IconName } from '../components/Icon'
 import { Logo } from '../components/Logo'
 import { useUser } from '../user'
 
@@ -13,7 +13,12 @@ interface Message {
   actions?: PendingAction[]
 }
 
-const EXAMPLES = ['אכלתי 2 ביצים, פרוסת לחם וקוטג\'', 'רצתי חצי שעה', 'מה לאכול לארוחת ערב?', 'איך אני מתקדם השבוע?']
+const EXAMPLES: { text: string; icon: IconName }[] = [
+  { text: 'אכלתי 2 ביצים, פרוסת לחם וקוטג\'', icon: 'kitchen' },
+  { text: 'רצתי חצי שעה', icon: 'run' },
+  { text: 'מה לאכול לארוחת ערב?', icon: 'bulb' },
+  { text: 'איך אני מתקדם השבוע?', icon: 'chart' },
+]
 
 export function Chat() {
   const user = useUser()
@@ -76,7 +81,9 @@ export function Chat() {
           </div>
           <div className="chips">
             {EXAMPLES.map((ex) => (
-              <button key={ex} className="chip" onClick={() => send(ex)}>{ex}</button>
+              <button key={ex.text} className="chip icon-chip" onClick={() => send(ex.text)}>
+                <Icon name={ex.icon} size={14} /> {ex.text}
+              </button>
             ))}
           </div>
         </div>
