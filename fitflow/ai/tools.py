@@ -121,7 +121,8 @@ TOOLS = [
         "name": "get_today_status",
         "description": (
             "Today's targets, what was eaten, what remains (calories and macros), calories burned in "
-            "workouts, and the energy balance (negative = deficit). Only includes CONFIRMED entries."
+            "workouts, and the planned balance: the calorie target minus the day's expenditure "
+            "(negative = the planned deficit). Only includes CONFIRMED entries."
         ),
         "input_schema": {"type": "object", "properties": {}},
     },
