@@ -251,6 +251,11 @@ src/pages/      Onboarding, Today, Chat, Meal, Workouts, Progress
   loads the app instead of a 404.
 - **PostgreSQL in production** (`DATABASE_URL`), SQLite locally. `postgres://` URLs from hosting platforms
   are normalized for SQLAlchemy.
+- **The database is on Neon, the server on Render.** Render's free PostgreSQL is deleted 30 days after it's
+  created, so the database moved to Neon's free tier, which doesn't expire. It took no code change: the app
+  reads only `DATABASE_URL`, and on an empty database the idempotent startup creates the tables, loads the
+  5,000+ foods and creates the demo account. A direct connection is used, not Neon's pooled one: SQLAlchemy
+  already pools connections, and a transaction-mode PgBouncer can clash with psycopg's prepared statements.
 - **Secrets only in environment variables:** `JWT_SECRET`, `ANTHROPIC_API_KEY`. None are in git.
 - **The container doesn't run as root**, and `/api/health` answers the platform's health checks.
 - **CI (GitHub Actions)** runs on every push: the Python tests on SQLite **and on PostgreSQL**, frontend lint

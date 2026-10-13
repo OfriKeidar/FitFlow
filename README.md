@@ -77,7 +77,7 @@ The core logic is built on classic algorithms from CS courses:
 ## Stack
 **Backend:** Python 3.11, FastAPI, SQLAlchemy 2, PuLP, Gemini (OpenAI-compatible API) / Anthropic SDK, PyJWT, pytest (142 tests)
 **Frontend:** React 19, TypeScript, Vite, Recharts, a PWA manifest, dark mode
-**Ops:** Docker (multi-stage, non-root), docker-compose with PostgreSQL, GitHub Actions (tests on SQLite *and* PostgreSQL, lint, build, Docker smoke test), Render blueprint
+**Ops:** Docker (multi-stage, non-root), docker-compose with PostgreSQL, GitHub Actions (tests on SQLite *and* PostgreSQL, lint, build, Docker smoke test), Render (server) + Neon (PostgreSQL)
 
 ## Run it
 
